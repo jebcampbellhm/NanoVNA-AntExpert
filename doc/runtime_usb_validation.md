@@ -26,8 +26,9 @@ The flashed H4 image was verified by STM32CubeProgrammer; SHA-256:
 
 That physical NanoVNA-H4 rev4.4 / ZeeTK test used an integration image containing
 the separately proposed ZeeTK RF profile. This branch alone has not been flashed
-on legacy hardware. The final Saver/display check is pending user confirmation.
-Host regression and sanitizer suites pass on the integration branch. Both target
+on legacy hardware. The user confirmed normal display sweeping and a successful
+NanoVNA-Saver sweep on COM13 with the integration image.
+Host regression and sanitizer suites pass independently on this branch. Both target
 builds use WSL ARM GCC 14.2.1; F072 requires USE_LTO=yes with this toolchain.
 There is no physical NanoVNA-H test or exhaustive RF accuracy/settling claim.
 
