@@ -425,7 +425,11 @@ bool sweep_service_wait_for_capture(void) {
       wait_count = 0;
       return false;
     }
-    __WFI();
+    // The sweep task has higher priority than the USB shell. WFI only idles
+    // the CPU; it leaves this task runnable and can starve the shell forever.
+    // Sleep for one RTOS tick (clamped by the tickless timer's minimum delta)
+    // while DMA continues collecting samples and enforcing the RF delay.
+    chThdSleep(1);
   }
   return true;
 }

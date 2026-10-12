@@ -20,10 +20,16 @@ functions without requiring any STM32 hardware.
     2.7 GHz, codec clock/gain, output drive, and safe profile switching; runs
     for H and H4, including low-frequency cache collisions and threshold bounds
   - `test_startup_timing.py`: compiles the production timing functions with a
-    simulated clock; checks capture and PLL waits across rollover, sweep-start
+    simulated clock; checks RTOS blocking and capture timeout, capture and PLL
+    waits across rollover, sweep-start
     delay scope, ADC startup timeout, and configuration/generator startup order
   - `test_sweep_snapshot.py`: exercises production snapshot functions with
     controlled interleavings, partial sweeps, reader handoff and timer rollover
+  - `test_snp_import.py`: runs the production SD loader with injected read errors;
+    incomplete files must not publish snapshots or replace sweep settings
+  - `test_usb_control.py`: exercises the production CDC control hook; opening,
+    closing, repeated DTR requests, and RTS changes must preserve transfer queues
+    and hold the ISR lock when waking RTOS waiters
 - `tests/stubs/` provides lightweight stand-ins for headers that normally come
   from ChibiOS/HAL so that host builds can compile firmware files.
 
@@ -33,9 +39,10 @@ functions without requiring any STM32 hardware.
 make test
 ```
 
-The `test` target builds and executes the C suites, then runs the startup/timing
-harness using Python 3 and the host C compiler. Override `HOST_PYTHON` or
-`HOST_CC` if needed. Failures are reported with descriptive messages.
+The `test` target builds and executes the C suites, then runs the startup/timing,
+snapshot, SD-import, and USB-control harnesses using Python 3 and the host C compiler.
+Override `HOST_PYTHON` or `HOST_CC` if needed. Failures are reported with
+descriptive messages.
 
 For memory/undefined-behavior checks, use a separate output directory and make
 sanitizer errors fatal (including in the Python-driven C harnesses):
