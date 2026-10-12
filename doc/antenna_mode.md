@@ -76,15 +76,23 @@ The UI tests exercise entry/exit restoration, save failures, tune clamps,
 calibration transitions, every preset, and pixel bounds using the real H4 font.
 `ANTENNA_PREVIEW_DIR=/path` saves PPM screen previews from that same renderer.
 
-Validation on 2026-10-12: all 14 C suites and four production-function/UI Python
+Validation on 2026-10-12 after merging the validated runtime/USB fixes at
+`6b89542`: all 14 C suites and six production-function/UI Python
 harnesses passed, both normally and with AddressSanitizer/UndefinedBehaviorSanitizer.
 Clean WSL builds with ARM GCC 14.2.1 passed for F303 and F072 (the latter with
-`USE_LTO=yes`). H4: text 115,244, data 552, bss 48,444 bytes; H: text 97,916,
+`USE_LTO=yes`). H4: text 115,252, data 552, bss 48,444 bytes; H: text 97,896,
 data 328, bss 15,104 bytes. H4 has no compiler warnings; H retains the existing
 LTO assembler-listing and CMSIS stack-pointer-clobber warnings. H4 CCM use is
 8,020 of 8,192 bytes, and main-RAM heap space is 400 bytes; this feature adds
 no dynamic allocation. Host-rendered previews passed pixel-bound checks and
 were visually inspected. Physical-device validation remains outstanding.
+
+The integrated H4 binary SHA-256 is
+`fcac6372f6b7887bf71a02e2436aaa188da48c7d0f32a4e7911ccf96b48f8eee`.
+This image includes capture-task sleeping, CDC queue preservation, and failed
+SD-read rejection from the final ZeeTK validation. The earlier on-device
+validation covered those fixes without Antenna Mode; the checklist below still
+needs to be completed on this image.
 
 Before considering this feature hardware-validated:
 

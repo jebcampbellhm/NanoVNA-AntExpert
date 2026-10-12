@@ -40,7 +40,8 @@ make test
 ```
 
 The `test` target builds and executes the C suites, then runs the startup/timing,
-snapshot, SD-import, and USB-control harnesses using Python 3 and the host C compiler.
+snapshot, antenna UI, marker mapping, SD-import, and USB-control harnesses using
+Python 3 and the host C compiler. Antenna math and favorites also have a C suite.
 Override `HOST_PYTHON` or `HOST_CC` if needed. Failures are reported with
 descriptive messages.
 
