@@ -14,6 +14,7 @@ static uint32_t favorites;
 static freq_t tune_frequency, expected_start, expected_stop;
 static freq_t saved_start, saved_stop;
 static uint16_t saved_points, saved_mode;
+static uint16_t antenna_points = 101;
 static uint8_t saved_sweep;
 static float saved_portz;
 /* CPU-only cache: CCM is not DMA-accessible. Written in full before valid=true;
@@ -72,7 +73,7 @@ static void button(const char *s, int x, int y, int w, int h) {
 }
 static bool range_matches(void) {
   return frequency0 == expected_start && frequency1 == expected_stop &&
-         sweep_points == (tuning ? 21 : saved_points) &&
+         sweep_points == (tuning ? 21 : antenna_points) &&
          !(props_mode & DOMAIN_MODE) && current_props._portz == 50;
 }
 static void apply_range(void) {
@@ -80,7 +81,7 @@ static void apply_range(void) {
   expected_start = tuning ? tune_frequency : b->start;
   expected_stop = tuning ? tune_frequency : b->stop;
   frequency0 = expected_start; frequency1 = expected_stop;
-  sweep_points = tuning ? 21 : saved_points;
+  sweep_points = tuning ? 21 : antenna_points;
   props_mode &= ~(DOMAIN_MODE | TD_CENTER_SPAN);
   current_props._portz = 50;
   sweep_mode |= SWEEP_ENABLE;
@@ -149,6 +150,8 @@ static void draw_picker(void) {
   unsigned n = band_list(list);
   char s[48];
   label("SELECT BAND",12,8,2);
+  plot_printf(s,sizeof(s),"PTS: %u",antenna_points);
+  button(s,260,0,220,36);
   button(group == 0 ? "[HF+6]" : "HF+6",0,38,160,42);
   button(group == 1 ? "[V/UHF]" : "V/UHF",160,38,160,42);
   button(group == 2 ? "[FAV]" : "FAV",320,38,160,42);
@@ -177,6 +180,8 @@ static void draw_strip(void) {
   if (picker) { draw_picker(); return; }
   char s[80];
   label(antenna_bands[band].name,12,8,2);
+  plot_printf(s,sizeof(s),"%u PTS",tuning ? 21 : antenna_points);
+  label(s,130,8,2);
   button((favorites & (1u<<band)) ? "FAV *" : "FAV +",250,0,130,36);
   button("VNA",380,0,100,36);
   const char *cal = "UNCALIBRATED";
@@ -200,13 +205,13 @@ static void draw_strip(void) {
   plot_printf(s,sizeof(s),"%.5f MHz",(double)f/1000000.0);
   label(s,222,92,2);
   if (!range_matches()) label("Range changed: tap SWEEP",222,123,1);
-  else if (!ready) label("Measuring...",222,123,1);
+  else if (!ready) label((sweep_mode & SWEEP_ENABLE) ? "Measuring..." : "Paused",222,123,1);
   else label(tuning ? "At selected frequency" : "Lowest sampled SWR",222,123,1);
   if (tuning) {
     button("- FREQ",16,173,190,58); button("+ FREQ",274,173,190,58);
     uint32_t step = (antenna_bands[band].stop-antenna_bands[band].start)/200;
     if (step < 10) step = 10;
-    plot_printf(s,sizeof(s),"Tap: %u Hz step",step);
+    plot_printf(s,sizeof(s),"Jog or tap: %u Hz step",step);
     label(s,24,248,1);
   } else {
     line(42,165,42,245); line(42,245,466,245);
@@ -247,7 +252,17 @@ static void draw_strip(void) {
     } else strcpy(s,"2:1 width: --");
     label(s,12,147,1);
   }
-  button("BANDS",0,276,120,44); button("SWEEP",120,276,120,44);
+  button("BANDS",0,276,120,44);
+  bool running = (sweep_mode & SWEEP_ENABLE) != 0;
+  pixel_t fg = ink, bg = paper;
+  if (running && !tuning) {
+    for (int y = 277; y < 319; ++y) line(121,y,238,y);
+    ink = bg; paper = fg;
+  }
+  button("",120,276,120,44);
+  label("SWEEP",128,281,2);
+  label(tuning ? "FULL BAND" : (running ? "RUNNING" : "PAUSED"),128,306,1);
+  ink = fg; paper = bg;
   button("TUNE",240,276,120,44); button("CAL",360,276,120,44);
 }
 bool antenna_ui_draw(void) {
@@ -279,7 +294,11 @@ bool antenna_ui_touch(int x, int y) {
   touch_wait_release();
   if (picker) {
     uint8_t list[ANTENNA_BAND_COUNT]; unsigned n = band_list(list);
-    if (y >= 38 && y < 80) { group = x/160; page = 0; }
+    if (y < 36 && x >= 260) {
+      antenna_points = antenna_points == 101 ? 201 : (antenna_points == 201 ? 401 : 101);
+      tuning = false; apply_range();
+    }
+    else if (y >= 38 && y < 80) { group = x/160; page = 0; }
     else if (y >= 88 && y < 258) {
       unsigned j = page*6 + ((y-88)/58)*2 + x/240;
       if (j < n) { band = list[j]; picker = false; tuning = false; apply_range(); }
@@ -299,14 +318,22 @@ bool antenna_ui_touch(int x, int y) {
     }
   } else if (y >= 276) {
     if (x < 120) { picker = true; page = 0; }
-    else if (x < 240) { tuning = false; apply_range(); }
+    else if (x < 240) {
+      if (tuning || !range_matches()) { tuning = false; apply_range(); }
+      else if (sweep_mode & SWEEP_ENABLE) sweep_mode &= ~(SWEEP_ENABLE | SWEEP_ONCE);
+      else sweep_mode |= SWEEP_ENABLE;
+    }
     else if (x < 360) {
       if (!tuning) tune_frequency = valid && range_matches() ? get_frequency(result.minimum) :
                    antenna_bands[band].start+(antenna_bands[band].stop-antenna_bands[band].start)/2;
       tuning = true; apply_range();
     } else {
       // Calibrate the entire selected band, never just the tune frequency.
-      tuning = false; apply_range(); ui_mode_menu(); menu_push_submenu(menu_cal_menu);
+      tuning = false; apply_range(); menu_push_submenu(menu_cal_menu); ui_mode_menu();
+      // apply_range queued a full clear. Consume it before painting the menu,
+      // otherwise the later plot redraw erases the freshly drawn CAL buttons.
+      draw_all(); menu_draw(-1);
+      return true;
     }
   } else if (tuning && y >= 173 && y < 231) {
     if (x < 206) tune_step(false); else if (x >= 274) tune_step(true);
@@ -316,9 +343,9 @@ bool antenna_ui_touch(int x, int y) {
 bool antenna_ui_lever(uint16_t status) {
   if (!active) return false;
   if (status & EVT_BUTTON_SINGLE_CLICK) { picker = !picker; page = 0; }
+  else if (tuning && !picker && (status & (EVT_UP|EVT_DOWN))) tune_step((status & EVT_UP) != 0);
   else if (status & (EVT_UP|EVT_DOWN)) {
-    // Rotation always selects favorites, even from TUNE or the band picker.
-    // Frequency adjustment remains on the two large TUNE touch buttons.
+    // Outside TUNE, rotation selects favorites, including from the picker.
     unsigned next = band;
     for (unsigned i = 0; i < ANTENNA_BAND_COUNT; ++i) {
       next = (next + ((status & EVT_UP) ? 1 : ANTENNA_BAND_COUNT-1)) % ANTENNA_BAND_COUNT;

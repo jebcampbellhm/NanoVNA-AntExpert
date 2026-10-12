@@ -22,6 +22,7 @@ HEADER = r'''
 #define SWEEP_POINTS_MAX 401
 #define FONT_START_CHAR 0x16
 #define SWEEP_ENABLE 1
+#define SWEEP_ONCE 2
 #define DOMAIN_MODE 1
 #define TD_CENTER_SPAN 64
 #define CALSTAT_ED 1
@@ -71,6 +72,8 @@ void app_measurement_update_frequencies(void);
 void ui_mode_normal(void);
 void ui_mode_menu(void);
 void menu_push_submenu(const menuitem_t *);
+void draw_all(void);
+void menu_draw(uint32_t);
 void touch_wait_release(void);
 int config_save(void);
 void ui_message_box(const char *,const char *,uint32_t);
@@ -92,6 +95,8 @@ float measured[2][401][2];
 const menuitem_t menu_cal_menu[]={1};
 static unsigned writes, messages, updates, menus;
 static bool fail_save;
+static uint16_t pending_redraw;
+static bool menu_visible;
 static int color=1;
 static uint8_t pixels[320][480];
 pixel_t spi_buffer[SPI_BUFFER_SIZE];
@@ -107,7 +112,14 @@ void lcd_bulk(int x,int y,int w,int h) {
   strip_transfers++;
 }
 extern const uint8_t x7x11b_bits[];
-void request_to_redraw(uint16_t m) { (void)m; }
+void request_to_redraw(uint16_t m) { pending_redraw |= m; }
+void draw_all(void) {
+  if(pending_redraw==REDRAW_ALL) menu_visible=false;
+  pending_redraw=0;
+}
+void menu_draw(uint32_t mask) {
+  (void)mask; assert(ui_mode==UI_MENU && pending_redraw==0); menu_visible=true;
+}
 void lcd_set_colors(int f,int b) { assert(b==0); color=f; }
 void lcd_set_foreground(int f) { color=f; }
 void lcd_clear_screen(void) { assert(!"antenna redraw must never blank the LCD"); }
@@ -189,6 +201,13 @@ int main(void) {
   assert(antenna_ui_draw());
   assert(strip_transfers==transfers_before+40 && next_strip==0);
   assert(memcmp(previous,pixels,sizeof(pixels))==0);
+  assert(pixels[300][238]==1); // Filled RUNNING button.
+  unsigned pause_updates=updates, pause_writes=writes;
+  antenna_ui_touch(180,295); assert(!(sweep_mode&SWEEP_ENABLE));
+  preview("paused"); assert(pixels[300][238]==0);
+  assert(updates==pause_updates && writes==pause_writes);
+  antenna_ui_touch(180,295); assert(sweep_mode&SWEEP_ENABLE);
+  assert(updates==pause_updates); // Resume keeps the completed trace/range.
   uint32_t before=antenna_favorites_decode(config._reserved);
   antenna_ui_touch(280,10); assert(writes==2);
   assert(antenna_favorites_decode(config._reserved)==(before^(1u<<5)));
@@ -198,6 +217,8 @@ int main(void) {
   antenna_ui_touch(260,295);
   assert(frequency0==frequency1 && sweep_points==21);
   uint32_t cw=frequency0; sample(); preview("tune");
+  antenna_ui_lever(EVT_UP); assert(frequency0==cw+1750 && frequency0==frequency1);
+  antenna_ui_lever(EVT_DOWN); assert(frequency0==cw && sweep_points==21);
   assert(pixels[266][42]==0); // No band rail in fixed-frequency tuning.
   antenna_ui_touch(400,200); assert(frequency0>cw && frequency0==frequency1);
   antenna_ui_touch(20,200); assert(frequency0==cw);
@@ -206,6 +227,8 @@ int main(void) {
   for(unsigned i=0;i<300;i++) antenna_ui_touch(20,200);
   assert(frequency0==14000000);
   antenna_ui_touch(400,295); assert(menus==1 && ui_mode==UI_MENU);
+  assert(menu_visible && pending_redraw==0);
+  draw_all(); assert(menu_visible); // The next service-loop draw cannot erase CAL.
   assert(frequency0==14000000 && frequency1==14350000 && sweep_points==101);
   assert(!antenna_ui_draw()); ui_mode_normal();
   cal_frequency0=14000000; cal_frequency1=14350000;
@@ -239,7 +262,15 @@ int main(void) {
   sample(); preview("60m-sweep");
   antenna_ui_touch(400,10);
   // Every band at maximum point count, graph ceiling, and large readout.
-  sweep_points=401; antenna_ui_enter(0);
+  sweep_points=401; antenna_ui_enter(0); assert(sweep_points==101);
+  antenna_ui_touch(20,295);
+  antenna_ui_touch(300,15); assert(sweep_points==201);
+  preview("points-201");
+  antenna_ui_touch(300,15); assert(sweep_points==401);
+  antenna_ui_touch(300,15); assert(sweep_points==101);
+  antenna_ui_touch(300,15); antenna_ui_touch(300,15);
+  assert(sweep_points==401);
+  antenna_ui_touch(400,295);
   for(unsigned g=0;g<2;g++) for(unsigned p=0;p<(g?1:2);p++)
     for(unsigned j=0;j<6;j++) {
       if(g && j==5) break;
@@ -269,7 +300,10 @@ int main(void) {
   antenna_ui_lever(EVT_BUTTON_SINGLE_CLICK); assert(frequency0==14000000);
   antenna_ui_lever(EVT_DOWN); assert(frequency0==7000000); // Also leaves picker.
   antenna_ui_touch(260,295); assert(sweep_points==21);
-  antenna_ui_lever(EVT_UP); assert(frequency0==14000000 && frequency1==14350000 && sweep_points==401);
+  uint32_t tune_before=frequency0;
+  antenna_ui_lever(EVT_UP); assert(frequency0==tune_before+1500 && frequency0==frequency1 && sweep_points==21);
+  antenna_ui_touch(180,295); assert(frequency0==7000000 && frequency1==7300000 && sweep_points==401);
+  antenna_ui_lever(EVT_UP); assert(frequency0==14000000 && sweep_points==401);
   assert(writes==saved_writes); // No flash writes for rotation or TUNE.
 
   // Simulate loading persisted configuration after a power cycle. Restoration

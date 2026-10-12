@@ -18,22 +18,32 @@ clamp to the start instead of wrapping to the end.
   on the right, using the same large font and no approximation prefix.
   A single 60 m tile covers all five channels, with numbered center guides on
   the sweep graph. The sweep also measures the gaps between channels.
+  Tap **PTS** at the upper right to cycle 101, 201, and 401 points. The default
+  is 101 after power-on; the selection carries between bands during the session.
+  The band screen shows its active point count beside the band name.
 - **FAV + / FAV \*:** toggle and immediately save the current preset as a favorite.
   This uses the existing configuration save operation, which also saves other
   current device configuration settings. A failed save restores the old favorites.
-- **SWEEP:** repeatedly measure the full preset at the previous VNA point count.
+- **SWEEP:** toggle continuous measurement and pause, preserving the last trace.
+  The running button is filled and says RUNNING; the paused button is outlined
+  and says PAUSED. From TUNE it returns to a running full-band sweep; if a USB
+  command changed the range, it reapplies the selected preset.
 - **Roller left/right:** cycle backward/forward through favorite bands in band
-  order, wrapping at either end. Selecting a favorite leaves the picker or TUNE
+  order, wrapping at either end. Selecting a favorite leaves the picker
   and starts a full-band sweep. An empty list does nothing; a single favorite
-  stays selected. Pressing the roller still opens/closes the band picker.
+  stays selected. In TUNE, rotation instead adjusts frequency by the displayed
+  step. Pressing the roller still opens/closes the band picker.
 - **TUNE:** start at the lowest measured SWR frequency, or the band center before
-  a complete sweep is available. Use the large frequency touch buttons
+  a complete sweep is available. Use the roller or large frequency touch buttons
   to move by 1/200 of the preset width (minimum 10 Hz), clamped to that preset.
   The instrument measures 21 points at that same frequency and displays the middle
   sample after each completed sweep. This is continuous updating, not instantaneous
   feedback; RF bandwidth and settling settings still determine update speed.
 - **CAL:** return to a sweep of the whole preset and open the existing calibration
   workflow. Perform the usual open/short/load calibration on CH0 and save it there.
+  This temporarily uses the VNA plot and calibration menu; closing the menu
+  returns to Antenna. The pending full-screen clear is consumed before the CAL
+  menu is repainted, so it cannot erase the menu buttons on the next redraw.
 - **VNA:** restore the prior frequency range, point count, frequency/time-domain
   selection, reference impedance, and running/paused state. Calibration changes
   made while in Antenna Mode remain available.
@@ -163,7 +173,7 @@ roller-direction checks remain pending.
 4. Calibrate a band with known standards. Check a 50-ohm load near 1:1,
    an open/short at high SWR, and a known mismatch against the ordinary VNA view.
 5. Check a real antenna's minimum and 2:1 crossings against the ordinary SWR trace.
-6. Enter TUNE; verify frequency touch buttons, limits, responsiveness,
+6. Enter TUNE; verify frequency touch buttons and roller, limits, responsiveness,
    and return to full-band calibration through CAL.
 7. Check out-of-range/interpolated calibration labels and return to VNA from
    both running and paused entry states. Verify prior settings are restored.
