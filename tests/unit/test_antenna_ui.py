@@ -35,6 +35,18 @@ HEADER = r'''
 #define EVT_BUTTON_SINGLE_CLICK 1
 #define EVT_UP 2
 #define EVT_DOWN 4
+#define LCD_WIDTH 480
+#define LCD_HEIGHT 320
+#define SPI_BUFFER_SIZE 4096
+typedef uint16_t pixel_t;
+extern pixel_t spi_buffer[SPI_BUFFER_SIZE];
+extern const uint8_t x7x11b_bits[];
+#define FONT_GET_HEIGHT 11
+#define FONT_GET_DATA(ch) (x7x11b_bits+((ch)-FONT_START_CHAR)*11)
+#define FONT_GET_WIDTH(ch) (8-(FONT_GET_DATA(ch)[0]&7))
+#define GET_PALTETTE_COLOR(i) (i)
+void lcd_bulk_finish(void);
+void lcd_bulk(int,int,int,int);
 typedef uint32_t freq_t;
 typedef int menuitem_t;
 extern const menuitem_t menu_cal_menu[];
@@ -78,11 +90,23 @@ static unsigned writes, messages, updates, menus;
 static bool fail_save;
 static int color=1;
 static uint8_t pixels[320][480];
+pixel_t spi_buffer[SPI_BUFFER_SIZE];
+static unsigned strip_transfers, next_strip;
+static bool buffer_ready;
+void lcd_bulk_finish(void) { buffer_ready=true; }
+void lcd_bulk(int x,int y,int w,int h) {
+  assert(buffer_ready); // Rendering must finish prior DMA before using SPI RAM.
+  assert(x==0 && y==(int)next_strip && w==480 && h==8);
+  for(int row=0;row<h;row++) for(int col=0;col<w;col++)
+    pixels[y+row][col]=spi_buffer[row*w+col];
+  next_strip=(next_strip+h)%320;
+  strip_transfers++;
+}
 extern const uint8_t x7x11b_bits[];
 void request_to_redraw(uint16_t m) { (void)m; }
 void lcd_set_colors(int f,int b) { assert(b==0); color=f; }
 void lcd_set_foreground(int f) { color=f; }
-void lcd_clear_screen(void) { memset(pixels,0,sizeof(pixels)); }
+void lcd_clear_screen(void) { assert(!"antenna redraw must never blank the LCD"); }
 static void pixel(int x,int y,int c) {
   assert(x>=0 && x<480 && y>=0 && y<320);
   pixels[y][x]=c;
@@ -146,6 +170,14 @@ int main(void) {
   assert(frequency0==14000000 && frequency1==14350000 && sweep_points==101);
   assert(current_props._portz==50 && !(props_mode&DOMAIN_MODE) && sweep_mode==1);
   preview("waiting"); sample(); preview("sweep");
+  // A repeated frame must replace complete strips, without clearing the LCD,
+  // changing pixels, or using a second framebuffer in firmware.
+  uint8_t previous[320][480]; memcpy(previous,pixels,sizeof(pixels));
+  unsigned transfers_before=strip_transfers;
+  buffer_ready=false;
+  assert(antenna_ui_draw());
+  assert(strip_transfers==transfers_before+40 && next_strip==0);
+  assert(memcmp(previous,pixels,sizeof(pixels))==0);
   uint32_t before=antenna_favorites_decode(config._reserved);
   antenna_ui_touch(280,10); assert(writes==1);
   assert(antenna_favorites_decode(config._reserved)==(before^(1u<<9)));

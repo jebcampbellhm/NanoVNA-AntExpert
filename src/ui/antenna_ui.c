@@ -22,13 +22,52 @@ static float curve[SWEEP_POINTS_MAX] __attribute__((section(".ccm")));
 static uint16_t count;
 static antenna_result_t result;
 
+/* Compose complete strips before transferring them. Clearing the LCD and then
+ * drawing individual glyphs/lines exposes a blank frame on every sweep.
+ * Reuse the shared SPI buffer; a full framebuffer would not fit in H4 RAM. */
+#define STRIP_HEIGHT 8
+_Static_assert(LCD_WIDTH * STRIP_HEIGHT <= SPI_BUFFER_SIZE, "antenna strip exceeds SPI buffer");
+static int strip_y;
+static pixel_t ink, paper;
+
+static void pixel(int x, int y, pixel_t color) {
+  if (x >= 0 && x < LCD_WIDTH && y >= strip_y && y < strip_y + STRIP_HEIGHT)
+    spi_buffer[(y-strip_y)*LCD_WIDTH+x] = color;
+}
+static void line(int x, int y, int x1, int y1) {
+  if ((y < strip_y && y1 < strip_y) ||
+      (y >= strip_y+STRIP_HEIGHT && y1 >= strip_y+STRIP_HEIGHT)) return;
+  int dx = x1-x, dy = y1-y;
+  int sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1;
+  if (dx < 0) dx = -dx;
+  if (dy > 0) dy = -dy;
+  int error = dx+dy;
+  for (;;) {
+    pixel(x,y,ink);
+    if (x == x1 && y == y1) break;
+    int twice = 2*error;
+    if (twice >= dy) { error += dy; x += sx; }
+    if (twice <= dx) { error += dx; y += sy; }
+  }
+}
 static void redraw(void) { request_to_redraw(REDRAW_ALL); }
 static void label(const char *s, int x, int y, unsigned scale) {
-  lcd_drawstring_size(s, x, y, scale);
+  if (y >= strip_y+STRIP_HEIGHT || y+(int)(FONT_GET_HEIGHT*scale) <= strip_y) return;
+  while (*s) {
+    unsigned ch = (uint8_t)*s++;
+    const uint8_t *glyph = FONT_GET_DATA(ch);
+    unsigned width = FONT_GET_WIDTH(ch);
+    for (int row = 0; row < FONT_GET_HEIGHT*(int)scale; ++row) {
+      if (y+row < strip_y || y+row >= strip_y+STRIP_HEIGHT) continue;
+      for (unsigned col = 0; col < width*scale; ++col)
+        pixel(x+col,y+row,(glyph[row/scale] & (0x80 >> (col/scale))) ? ink : paper);
+    }
+    x += width*scale;
+  }
 }
 static void button(const char *s, int x, int y, int w, int h) {
-  lcd_line(x,y,x+w-1,y); lcd_line(x,y+h-1,x+w-1,y+h-1);
-  lcd_line(x,y,x,y+h-1); lcd_line(x+w-1,y,x+w-1,y+h-1);
+  line(x,y,x+w-1,y); line(x,y+h-1,x+w-1,y+h-1);
+  line(x,y,x,y+h-1); line(x+w-1,y,x+w-1,y+h-1);
   label(s,x+8,y+(h-22)/2,2);
 }
 static bool range_matches(void) {
@@ -111,10 +150,8 @@ static int graph_y(float v) {
   if (v > 5) v = 5;
   return 245 - (int)((v-1)*20);
 }
-bool antenna_ui_draw(void) {
-  if (!active || ui_mode != UI_NORMAL) return false;
-  lcd_set_colors(LCD_FG_COLOR,LCD_BG_COLOR); lcd_clear_screen();
-  if (picker) { draw_picker(); return true; }
+static void draw_strip(void) {
+  if (picker) { draw_picker(); return; }
   char s[80];
   label(antenna_bands[band].name,12,8,2);
   button((favorites & (1u<<band)) ? "FAV *" : "FAV +",250,0,130,36);
@@ -149,15 +186,15 @@ bool antenna_ui_draw(void) {
     plot_printf(s,sizeof(s),"Jog or tap: %u Hz step",step);
     label(s,24,248,1);
   } else {
-    lcd_line(42,165,42,245); lcd_line(42,245,466,245);
-    lcd_line(42,225,466,225); label("2:1",4,220,1); label("5",18,164,1);
-    lcd_set_foreground(LCD_TRACE_1_COLOR);
+    line(42,165,42,245); line(42,245,466,245);
+    line(42,225,466,225); label("2:1",4,220,1); label("5",18,164,1);
+    ink = GET_PALTETTE_COLOR(LCD_TRACE_1_COLOR);
     if (ready && count > 1)
       for (unsigned i = 1; i < count; ++i)
         if (curve[i-1] >= 1 && curve[i] >= 1)
-          lcd_line(42+(i-1)*424/(count-1),graph_y(curve[i-1]),
+          line(42+(i-1)*424/(count-1),graph_y(curve[i-1]),
                    42+i*424/(count-1),graph_y(curve[i]));
-    lcd_set_foreground(LCD_FG_COLOR);
+    ink = GET_PALTETTE_COLOR(LCD_FG_COLOR);
     plot_printf(s,sizeof(s),"%.4f",(double)expected_start/1000000.0); label(s,42,250,1);
     plot_printf(s,sizeof(s),"%.4f MHz",(double)expected_stop/1000000.0); label(s,363,250,1);
     if (ready && result.bandwidth_valid) {
@@ -171,6 +208,21 @@ bool antenna_ui_draw(void) {
   }
   button("BANDS",0,276,120,44); button("SWEEP",120,276,120,44);
   button("TUNE",240,276,120,44); button("CAL",360,276,120,44);
+}
+bool antenna_ui_draw(void) {
+  if (!active || ui_mode != UI_NORMAL) return false;
+  /* A previous plot transfer may still own the shared buffer. Each lcd_bulk
+   * below also waits for DMA before this buffer is reused for the next strip. */
+  lcd_bulk_finish();
+  paper = GET_PALTETTE_COLOR(LCD_BG_COLOR);
+  for (strip_y = 0; strip_y < LCD_HEIGHT; strip_y += STRIP_HEIGHT) {
+    ink = GET_PALTETTE_COLOR(LCD_FG_COLOR);
+    for (unsigned i = 0; i < LCD_WIDTH*STRIP_HEIGHT; ++i) spi_buffer[i] = paper;
+    draw_strip();
+    int height = LCD_HEIGHT-strip_y;
+    if (height > STRIP_HEIGHT) height = STRIP_HEIGHT;
+    lcd_bulk(0,strip_y,LCD_WIDTH,height);
+  }
   return true;
 }
 static void tune_step(bool up) {

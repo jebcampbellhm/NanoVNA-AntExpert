@@ -94,6 +94,22 @@ SD-read rejection from the final ZeeTK validation. The earlier on-device
 validation covered those fixes without Antenna Mode; the checklist below still
 needs to be completed on this image.
 
+The first hardware trial exposed heavy flicker: each sweep cleared the entire
+LCD before drawing text and lines. The follow-up renderer composes complete
+480 x 8 strips in the existing SPI buffer and transfers them synchronously,
+without clearing the LCD. It adds eight bytes of static state and no framebuffer
+or heap allocation. Baseline and strip-rendered previews match pixel-for-pixel;
+the UI regression rejects screen clearing and checks repeated-frame transfers.
+Physical confirmation of flicker and responsiveness is still required.
+
+Follow-up validation: all 14 C suites and six Python harnesses pass normally and
+with ASan/UBSan; clean WSL H4 and H builds pass with the same toolchain/options.
+All 11 preview images match the previous renderer exactly. H4 text is 115,948,
+data 552, bss 48,452 bytes; heap space is 392 bytes and CCM use remains 8,020
+bytes. H size is unchanged. H4 has no warnings; H retains the existing toolchain
+warnings. The follow-up H4 binary SHA-256 is
+`4b27483aa3bdc9ffc71e746e86faec6085f87b36244bde469325aebb0045be5d`.
+
 Before considering this feature hardware-validated:
 
 1. Enter ANTENNA and verify large labels and all four bottom touch targets.
