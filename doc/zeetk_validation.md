@@ -89,13 +89,18 @@ does not block that thread in ChibiOS and can starve the lower-priority shell.
 It now uses a one-tick RTOS sleep, subject to the timer's minimum delta. DMA
 capture/discard timing is unchanged; only the task's completion polling is
 delayed. Host tests cover blocking, completion, and timeout across rollover.
-Continuous-sweep USB testing of this scheduling correction is still required.
+After flashing commit 7948c93 and verifying flash readback, continuous-sweep
+USB testing passed: 12 alternating CH0/CH1 reads returned 401 numeric sample
+pairs each across three open/query/close sessions. Each session also completed
+version queries and an explicit resume command. Data reads took 1.56-1.63 s.
+Test image SHA-256: `33e1251a63b0c0a92d7281dc245985dffdd0a48ebb751f72d42b89da23604c46`.
+The final NanoVNA-Saver/display check is pending user confirmation.
 
 Final USB testing on 2026-10-12 found a shell stall: a version query and a
 401-point CH0 read succeeded, then CH1 and subsequent queries stopped responding
 while the display remained responsive. Reconnecting USB and a reported fresh
-restart did not recover the subsequent version query. This blocks final USB
-sign-off; the earlier bench report below does not cover this failure.
+restart did not recover the subsequent version query. The scheduling correction
+and successful continuous-sweep retest above supersede this initial failure.
 
 Inspection found that the CDC DTR callback reset RX/TX queues without stopping
 active USB transfers and invoked an RTOS I-class wake operation without an ISR
@@ -103,8 +108,9 @@ lock. The targeted correction leaves queue initialization/disconnection to the
 USB bus-event callbacks and changes only the session flag on DTR, with the
 required ISR lock around the wake operation. A host regression test covers
 open/close/reopen, repeated DTR requests, and RTS-only changes. This is a
-candidate fix; repeat CH0/CH1 reads and NanoVNA-Saver tests on hardware before
-claiming the observed stall is resolved.
+separate correction: the pause/resume evidence identified scheduling starvation
+as the cause of the observed persistent stall. The passing continuous-sweep
+test includes both corrections and does not isolate the effect of the DTR fix.
 
 On 2026-10-12, the tester reported that hardware tests on the ZeeTK branch
 look good. The board was identified as NanoVNA-H4 rev4.4 / ZeeTK, originally
