@@ -79,6 +79,18 @@ Only the shell is a snapshot consumer; this is not a multi-reader queue.
 
 ## Hardware validation
 
+Further isolation on 2026-10-12: NanoVNA-Saver had been running during some
+earlier attempts. With Saver confirmed closed, both .NET and a native Win32
+serial probe still failed during continuous sweeping. Pausing the sweep from
+the device menu immediately restored the native probe's version response;
+three subsequent open/query/close sessions all succeeded with the sweep paused.
+The capture waiter used `__WFI()` in the higher-priority sweep thread; this
+does not block that thread in ChibiOS and can starve the lower-priority shell.
+It now uses a one-tick RTOS sleep, subject to the timer's minimum delta. DMA
+capture/discard timing is unchanged; only the task's completion polling is
+delayed. Host tests cover blocking, completion, and timeout across rollover.
+Continuous-sweep USB testing of this scheduling correction is still required.
+
 Final USB testing on 2026-10-12 found a shell stall: a version query and a
 401-point CH0 read succeeded, then CH1 and subsequent queries stopped responding
 while the display remained responsive. Reconnecting USB and a reported fresh

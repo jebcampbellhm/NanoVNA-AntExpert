@@ -20,7 +20,8 @@ functions without requiring any STM32 hardware.
     2.7 GHz, codec clock/gain, output drive, and safe profile switching; runs
     for H and H4, including low-frequency cache collisions and threshold bounds
   - `test_startup_timing.py`: compiles the production timing functions with a
-    simulated clock; checks capture and PLL waits across rollover, sweep-start
+    simulated clock; checks RTOS blocking and capture timeout, capture and PLL
+    waits across rollover, sweep-start
     delay scope, ADC startup timeout, and configuration/generator startup order
   - `test_sweep_snapshot.py`: exercises production snapshot functions with
     controlled interleavings, partial sweeps, reader handoff and timer rollover

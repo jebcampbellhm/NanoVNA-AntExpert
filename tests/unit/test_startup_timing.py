@@ -55,6 +55,7 @@ typedef int16_t audio_sample_t;
 static uint32_t now, elapsed, reads, resets, processed;
 static systime_t capture_start, capture_delay;
 static volatile uint16_t wait_count;
+static unsigned capture_sleeps, complete_after;
 static audio_sample_t rx_buffer[AUDIO_BUFFER_LEN * 2];
 static struct { unsigned _bandwidth; } config;
 static unsigned locked, p_sweep;
@@ -62,6 +63,13 @@ static volatile uint32_t fake_adc;
 static bool adc_changes;
 static jmp_buf halted;
 static systime_t chVTGetSystemTimeX(void) { return now; }
+static void chThdSleep(systime_t ticks) {
+  assert(!locked && ticks > 0);
+  now += ticks;
+  // A lower-priority task can run only when the capture waiter blocks.
+  capture_sleeps++;
+  if (complete_after && capture_sleeps == complete_after) wait_count = 0;
+}
 static void chThdSleepMilliseconds(uint32_t ms) {
   now += MS2ST(ms); elapsed += MS2ST(ms);
   if (adc_changes && elapsed >= MS2ST(3)) fake_adc = 2;
@@ -87,6 +95,7 @@ static uint8_t si5351_take_settling_cycles(void) { return 1; }
 source = prefix + '\n'.join([
     function(sweep, 'void i2s_lld_serve_rx_interrupt('),
     function(sweep, 'void sweep_service_start_capture('),
+    function(sweep, 'bool sweep_service_wait_for_capture('),
     function(sweep, 'static void fsm_setup_freq('),
     function(driver, 'static void si5351_wait_pll_lock('),
 ]) + r'''
@@ -105,6 +114,13 @@ static void check_capture(uint32_t start, uint32_t delay) {
   assert(wait_count == 0 && processed == 1);
 }
 int main(void) {
+  wait_count = 0; capture_sleeps = 0;
+  assert(sweep_service_wait_for_capture() && capture_sleeps == 0);
+  wait_count = 2; complete_after = 3; now = UINT32_MAX - 1;
+  assert(sweep_service_wait_for_capture() && capture_sleeps == 3 && now == 1);
+  wait_count = 2; complete_after = 0; capture_sleeps = 0; now = UINT32_MAX - 1;
+  assert(!sweep_service_wait_for_capture());
+  assert(wait_count == 0 && capture_sleeps == MS2ST(2000));
   check_capture(1000, 200);
   check_capture(UINT32_MAX - 100, 200); // Deadline crosses rollover.
   now = UINT32_MAX - 100; sweep_service_start_capture(50);
@@ -134,7 +150,7 @@ int main(void) {
     assert(!"stuck ADC must halt instead of continuing startup");
   }
   assert(elapsed == MS2ST(10));
-  puts("[PASS] startup ordering, capture/PLL rollover, sweep-start delay, ADC readiness/timeout");
+  puts("[PASS] startup ordering, RTOS capture blocking/timeout, capture/PLL rollover, sweep-start delay, ADC readiness/timeout");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='nanovna-timing-') as tmp:
