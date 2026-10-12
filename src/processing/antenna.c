@@ -54,13 +54,21 @@ antenna_result_t antenna_analyze(const float *swr, unsigned count) {
   return r;
 }
 uint32_t antenna_favorites_decode(const uint8_t bytes[3]) {
-  if ((bytes[2] & 0xf0) != 0xa0) return (1u<<3) | (1u<<5) | (1u<<10) | (1u<<11) | (1u<<13);
+  if ((bytes[2] & 0xe0) != 0xa0) return (1u<<3) | (1u<<5) | (1u<<10) | (1u<<11) | (1u<<13);
   uint32_t stored = bytes[0] | ((uint32_t)bytes[1]<<8) | ((uint32_t)(bytes[2]&15)<<16);
   // Keep the original on-flash bit positions. Any old 60 m favorite selects
   // the combined entry; all bands above it retain their original identity.
   return (stored & 3u) | ((stored & 0x7cu) ? 4u : 0u) | ((stored >> 4) & 0xfff8u);
 }
 void antenna_favorites_encode(uint8_t bytes[3], uint32_t mask) {
+  uint8_t mode = antenna_mode_decode(bytes) ? 0x10 : 0;
   uint32_t stored = (mask & 3u) | ((mask & 4u) ? 0x7cu : 0u) | ((mask & 0xfff8u) << 4);
-  bytes[0] = stored; bytes[1] = stored >> 8; bytes[2] = 0xa0 | ((stored>>16)&15);
+  bytes[0] = stored; bytes[1] = stored >> 8; bytes[2] = 0xa0 | mode | ((stored>>16)&15);
+}
+bool antenna_mode_decode(const uint8_t bytes[3]) {
+  return (bytes[2] & 0xf0) == 0xb0;
+}
+void antenna_mode_encode(uint8_t bytes[3], bool enabled) {
+  antenna_favorites_encode(bytes,antenna_favorites_decode(bytes));
+  bytes[2] = (bytes[2] & 0xef) | (enabled ? 0x10 : 0);
 }

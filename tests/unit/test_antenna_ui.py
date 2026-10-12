@@ -10,6 +10,9 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
+runtime = (ROOT / 'src/runtime/runtime_entry.c').read_text()
+thread = runtime[runtime.index('static THD_FUNCTION(Thread1, arg)'):]
+assert thread.index('ui_port.api->init();') < thread.index('plot_init();') < thread.index('antenna_ui_restore();') < thread.index('while (1)')
 HEADER = r'''
 #pragma once
 #include <stdbool.h>
@@ -167,7 +170,9 @@ static void sample(void) {
 }
 int main(void) {
   assert(!antenna_ui_draw()); assert(!antenna_ui_touch(10,10));
+  antenna_ui_restore(); assert(!antenna_ui_draw() && writes==0);
   antenna_ui_enter(0);
+  assert(writes==1 && antenna_mode_decode(config._reserved));
   assert(frequency0==14000000 && frequency1==14350000 && sweep_points==101);
   assert(current_props._portz==50 && !(props_mode&DOMAIN_MODE) && sweep_mode==1);
   preview("waiting"); sample(); preview("sweep");
@@ -185,7 +190,7 @@ int main(void) {
   assert(strip_transfers==transfers_before+40 && next_strip==0);
   assert(memcmp(previous,pixels,sizeof(pixels))==0);
   uint32_t before=antenna_favorites_decode(config._reserved);
-  antenna_ui_touch(280,10); assert(writes==1);
+  antenna_ui_touch(280,10); assert(writes==2);
   assert(antenna_favorites_decode(config._reserved)==(before^(1u<<5)));
   fail_save=true; antenna_ui_touch(280,10); assert(messages==1);
   assert(antenna_favorites_decode(config._reserved)==(before^(1u<<5)));
@@ -195,10 +200,10 @@ int main(void) {
   uint32_t cw=frequency0; sample(); preview("tune");
   assert(pixels[266][42]==0); // No band rail in fixed-frequency tuning.
   antenna_ui_touch(400,200); assert(frequency0>cw && frequency0==frequency1);
-  antenna_ui_lever(EVT_DOWN); assert(frequency0==cw);
-  for(unsigned i=0;i<300;i++) antenna_ui_lever(EVT_UP);
+  antenna_ui_touch(20,200); assert(frequency0==cw);
+  for(unsigned i=0;i<300;i++) antenna_ui_touch(400,200);
   assert(frequency0==14350000);
-  for(unsigned i=0;i<300;i++) antenna_ui_lever(EVT_DOWN);
+  for(unsigned i=0;i<300;i++) antenna_ui_touch(20,200);
   assert(frequency0==14000000);
   antenna_ui_touch(400,295); assert(menus==1 && ui_mode==UI_MENU);
   assert(frequency0==14000000 && frequency1==14350000 && sweep_points==101);
@@ -252,7 +257,54 @@ int main(void) {
       }
       if(band_index==1) preview("80m-bandplan");
     }
-  puts("antenna UI transitions, persistence, bounds and rendering passed");
+  antenna_ui_touch(400,10);
+  assert(!antenna_mode_decode(config._reserved));
+  antenna_favorites_encode(config._reserved,(1u<<3)|(1u<<5)|(1u<<13));
+  antenna_ui_enter(0);
+  unsigned saved_writes=writes;
+  antenna_ui_lever(EVT_UP); assert(frequency0==7000000); // Wrap from 23 cm.
+  antenna_ui_lever(EVT_DOWN); assert(frequency0==420000000);
+  antenna_ui_lever(EVT_UP); assert(frequency0==7000000);
+  antenna_ui_lever(EVT_UP); assert(frequency0==14000000);
+  antenna_ui_lever(EVT_BUTTON_SINGLE_CLICK); assert(frequency0==14000000);
+  antenna_ui_lever(EVT_DOWN); assert(frequency0==7000000); // Also leaves picker.
+  antenna_ui_touch(260,295); assert(sweep_points==21);
+  antenna_ui_lever(EVT_UP); assert(frequency0==14000000 && frequency1==14350000 && sweep_points==401);
+  assert(writes==saved_writes); // No flash writes for rotation or TUNE.
+
+  // Simulate loading persisted configuration after a power cycle. Restoration
+  // re-enters Antenna without writing flash; VNA stays VNA after leaving it.
+  uint8_t boot_config[3]; memcpy(boot_config,config._reserved,3);
+  antenna_ui_touch(400,10); assert(!antenna_ui_draw());
+  assert(!antenna_mode_decode(config._reserved));
+  unsigned boot_writes=writes;
+  antenna_ui_restore(); assert(!antenna_ui_draw() && writes==boot_writes);
+  memcpy(config._reserved,boot_config,3);
+  antenna_ui_restore(); assert(antenna_ui_draw() && writes==boot_writes);
+  assert(antenna_favorites_decode(config._reserved)==((1u<<3)|(1u<<5)|(1u<<13)));
+
+  // A failed mode save must report the failure and restore the prior setting.
+  fail_save=true; unsigned old_messages=messages;
+  antenna_ui_touch(400,10);
+  assert(!antenna_ui_draw() && antenna_mode_decode(config._reserved));
+  assert(messages==old_messages+1);
+  fail_save=false; antenna_ui_restore(); antenna_ui_touch(400,10);
+  fail_save=true; old_messages=messages; antenna_ui_enter(0);
+  assert(antenna_ui_draw() && !antenna_mode_decode(config._reserved));
+  assert(messages==old_messages+1);
+  fail_save=false; antenna_ui_touch(400,10);
+
+  antenna_favorites_encode(config._reserved,0);
+  antenna_ui_enter(0); uint32_t unchanged=frequency0; saved_writes=writes;
+  antenna_ui_lever(EVT_UP); antenna_ui_lever(EVT_DOWN);
+  assert(frequency0==unchanged && writes==saved_writes);
+  antenna_ui_touch(400,10);
+  antenna_favorites_encode(config._reserved,1u<<3);
+  antenna_ui_enter(0); antenna_ui_lever(EVT_UP); assert(frequency0==7000000);
+  unsigned unchanged_updates=updates; saved_writes=writes;
+  antenna_ui_lever(EVT_UP); antenna_ui_lever(EVT_DOWN);
+  assert(updates==unchanged_updates && writes==saved_writes);
+  puts("antenna UI transitions, mode persistence, favorites roller, bounds and rendering passed");
 }
 '''
 with tempfile.TemporaryDirectory() as d:

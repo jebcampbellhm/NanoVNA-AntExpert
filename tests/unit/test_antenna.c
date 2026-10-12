@@ -68,6 +68,20 @@ int main(void) {
   }
   antenna_favorites_encode(bytes,1u<<ANTENNA_60M_BAND);
   assert(bytes[0]==0x7c && bytes[1]==0 && bytes[2]==0xa0);
+  assert(!antenna_mode_decode(bytes)); // Legacy favorites boot into VNA.
+  antenna_mode_encode(bytes,true);
+  assert(antenna_mode_decode(bytes) && antenna_favorites_decode(bytes)==4);
+  antenna_favorites_encode(bytes,1u<<13);
+  assert(antenna_mode_decode(bytes) && antenna_favorites_decode(bytes)==(1u<<13));
+  antenna_mode_encode(bytes,false);
+  assert(!antenna_mode_decode(bytes) && antenna_favorites_decode(bytes)==(1u<<13));
+  memset(bytes,0xff,3);
+  assert(!antenna_mode_decode(bytes));
+  uint32_t defaults=antenna_favorites_decode(bytes);
+  antenna_mode_encode(bytes,true);
+  assert(antenna_mode_decode(bytes) && antenna_favorites_decode(bytes)==defaults);
+  antenna_favorites_encode(bytes,0);
+  assert(antenna_mode_decode(bytes) && antenna_favorites_decode(bytes)==0);
   assert(antenna_bands[2].start==5330600 && antenna_bands[2].stop==5406400);
   for(unsigned i=0;i<ANTENNA_60M_CHANNELS;i++) {
     assert(antenna_60m_centers[i]>antenna_bands[2].start);

@@ -286,6 +286,7 @@ static THD_FUNCTION(Thread1, arg) {
   ui_port.api->init();
   // Initialize graph plotting
   plot_init();
+  antenna_ui_restore();
   while (1) {
     measurement_engine_tick(&measurement_engine);
   }

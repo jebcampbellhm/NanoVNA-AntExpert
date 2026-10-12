@@ -22,4 +22,6 @@ typedef struct {
 antenna_result_t antenna_analyze(const float *swr, unsigned count);
 uint32_t antenna_favorites_decode(const uint8_t bytes[3]);
 void antenna_favorites_encode(uint8_t bytes[3], uint32_t mask);
+bool antenna_mode_decode(const uint8_t bytes[3]);
+void antenna_mode_encode(uint8_t bytes[3], bool enabled);
 #endif

@@ -88,6 +88,15 @@ static void apply_range(void) {
   app_measurement_update_frequencies();
   redraw();
 }
+static void save_mode(bool enabled) {
+  if (antenna_mode_decode(config._reserved) == enabled) return;
+  uint8_t old[3]; memcpy(old,config._reserved,3);
+  antenna_mode_encode(config._reserved,enabled);
+  if (config_save() != 0) {
+    memcpy(config._reserved,old,3);
+    ui_message_box("Startup mode","Save failed",1000);
+  }
+}
 void antenna_ui_enter(uint16_t data) {
   (void)data;
   if (!active) {
@@ -98,6 +107,12 @@ void antenna_ui_enter(uint16_t data) {
   }
   active = true; picker = false; tuning = false;
   ui_mode_normal(); apply_range();
+  save_mode(true);
+}
+void antenna_ui_restore(void) {
+  // Configuration and the normal UI/plot must be initialized first. Restoring
+  // the already-saved mode must not write flash on every power cycle.
+  if (antenna_mode_decode(config._reserved)) antenna_ui_enter(0);
 }
 static void leave(void) {
   active = false;
@@ -107,6 +122,7 @@ static void leave(void) {
   current_props._portz = saved_portz;
   sweep_mode = (sweep_mode & ~SWEEP_ENABLE) | saved_sweep;
   app_measurement_update_frequencies(); redraw();
+  save_mode(false);
 }
 void antenna_ui_measurement(void) {
   if (!active || !range_matches()) { valid = false; return; }
@@ -190,7 +206,7 @@ static void draw_strip(void) {
     button("- FREQ",16,173,190,58); button("+ FREQ",274,173,190,58);
     uint32_t step = (antenna_bands[band].stop-antenna_bands[band].start)/200;
     if (step < 10) step = 10;
-    plot_printf(s,sizeof(s),"Jog or tap: %u Hz step",step);
+    plot_printf(s,sizeof(s),"Tap: %u Hz step",step);
     label(s,24,248,1);
   } else {
     line(42,165,42,245); line(42,245,466,245);
@@ -300,11 +316,19 @@ bool antenna_ui_touch(int x, int y) {
 bool antenna_ui_lever(uint16_t status) {
   if (!active) return false;
   if (status & EVT_BUTTON_SINGLE_CLICK) { picker = !picker; page = 0; }
-  else if (tuning && !picker && (status & (EVT_UP|EVT_DOWN))) tune_step((status & EVT_UP) != 0);
-  else if (picker) {
-    uint8_t list[ANTENNA_BAND_COUNT]; unsigned n = band_list(list);
-    if ((status & EVT_UP) && (page+1)*6 < n) ++page;
-    if ((status & EVT_DOWN) && page) --page;
+  else if (status & (EVT_UP|EVT_DOWN)) {
+    // Rotation always selects favorites, even from TUNE or the band picker.
+    // Frequency adjustment remains on the two large TUNE touch buttons.
+    unsigned next = band;
+    for (unsigned i = 0; i < ANTENNA_BAND_COUNT; ++i) {
+      next = (next + ((status & EVT_UP) ? 1 : ANTENNA_BAND_COUNT-1)) % ANTENNA_BAND_COUNT;
+      if (favorites & (1u<<next)) {
+        if (next != band || tuning || picker) {
+          band = next; picker = tuning = false; apply_range();
+        }
+        break;
+      }
+    }
   }
   redraw(); return true;
 }

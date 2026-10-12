@@ -22,8 +22,12 @@ clamp to the start instead of wrapping to the end.
   This uses the existing configuration save operation, which also saves other
   current device configuration settings. A failed save restores the old favorites.
 - **SWEEP:** repeatedly measure the full preset at the previous VNA point count.
+- **Roller left/right:** cycle backward/forward through favorite bands in band
+  order, wrapping at either end. Selecting a favorite leaves the picker or TUNE
+  and starts a full-band sweep. An empty list does nothing; a single favorite
+  stays selected. Pressing the roller still opens/closes the band picker.
 - **TUNE:** start at the lowest measured SWR frequency, or the band center before
-  a complete sweep is available. Use the jog wheel or the large frequency buttons
+  a complete sweep is available. Use the large frequency touch buttons
   to move by 1/200 of the preset width (minimum 10 Hz), clamped to that preset.
   The instrument measures 21 points at that same frequency and displays the middle
   sample after each completed sweep. This is continuous updating, not instantaneous
@@ -33,6 +37,11 @@ clamp to the start instead of wrapping to the end.
 - **VNA:** restore the prior frequency range, point count, frequency/time-domain
   selection, reference impedance, and running/paused state. Calibration changes
   made while in Antenna Mode remain available.
+- **Power-on mode:** entering ANTENNA saves Antenna as the startup mode; leaving
+  with VNA saves VNA. Mode restoration runs after normal UI/plot initialization
+  and does not write flash. Like favorites, mode changes save the whole device
+  configuration. A failed save reports an error and retains the previous saved
+  startup choice. Only the view is remembered; Antenna starts at 20 m after boot.
 
 SWR is referenced to 50 ohms. The graph spans SWR 1 through 5; larger values
 clip at the top. The numeric readout displays 99.9+ above its readable range.
@@ -69,13 +78,15 @@ span includes gaps between the channel windows. Upper-frequency presets do not
 imply uniform measurement accuracy.
 
 Favorites use the three existing reserved configuration bytes: 20 legacy band
-bits and a four-bit `0xA` format marker. The 16 visible presets are mapped onto
+bits and a high nibble of `0xA` for VNA startup or `0xB` for Antenna startup.
+Existing `0xA` favorites remain valid and default to VNA startup. The 16 visible presets are mapped onto
 those original bit positions. Any saved 60 m channel favorite selects the combined
-60 m entry; saving it sets all five old channel bits, preserving compatibility.
+60 m entry; saving it sets all five old channel bits. Older antenna prototypes
+that only recognize `0xA` will fall back to default favorites for `0xB` records.
 No configuration size or calibration-slot layout
 changes. Uninitialized/cleared configuration defaults to 40 m, 20 m, 6 m, 2 m,
-and 70 cm; an explicitly empty list stays empty. Antenna Mode itself is not
-automatically entered at boot. The legacy bit mapping is part of the storage format.
+and 70 cm; an explicitly empty list stays empty. Cleared or unrecognized settings
+start in VNA. The legacy bit mapping is part of the storage format.
 
 The H4's CPU-only sweep cache occupies 1,604 bytes of CCM alongside the existing
 measurement buffer. It is written completely before use, does not use DMA, and
@@ -138,18 +149,30 @@ The combined-channel H4 binary SHA-256 is
 
 Before considering this feature hardware-validated:
 
+Startup-mode/favorites-roller update: all 14 C suites and six Python harnesses
+pass normally and with ASan/UBSan. Coverage includes old favorites, mode/favorites
+coexistence, both startup paths without boot-time flash writes, save failures,
+favorite wraparound, empty/single lists, and selecting from TUNE/the picker.
+Clean WSL builds pass for H4 and H (LTO). H4 text is 116,552, data 552, bss
+48,452 bytes; RAM use is unchanged. H size is unchanged. Hardware restart and
+roller-direction checks remain pending.
+
 1. Enter ANTENNA and verify large labels and all four bottom touch targets.
 2. Select several HF and V/UHF bands; check frequency limits and paging.
 3. Toggle favorites, reboot, and verify persistence, including an empty list.
 4. Calibrate a band with known standards. Check a 50-ohm load near 1:1,
    an open/short at high SWR, and a known mismatch against the ordinary VNA view.
 5. Check a real antenna's minimum and 2:1 crossings against the ordinary SWR trace.
-6. Enter TUNE; verify frequency buttons/jog direction, limits, responsiveness,
+6. Enter TUNE; verify frequency touch buttons, limits, responsiveness,
    and return to full-band calibration through CAL.
 7. Check out-of-range/interpolated calibration labels and return to VNA from
    both running and paused entry states. Verify prior settings are restored.
 8. Exercise USB capture/Saver alongside the display and check for flicker,
    missed touches, watchdog resets, or unexpected measurement stalls.
+9. Rotate left/right through favorites, including wraparound, one favorite,
+   and an empty list. Check that pushing still opens/closes the picker.
+10. Enter Antenna, power-cycle, and verify Antenna opens; leave through VNA,
+    power-cycle, and verify VNA opens. Favorites must survive both transitions.
 
 Multiband overview tiles and noncontiguous band-only scanning remain follow-up
 work; this first version performs one uniform sweep within the selected preset.
