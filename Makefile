@@ -466,6 +466,7 @@ endif
 .PHONY: test_runtime_regressions
 test: test_runtime_regressions
 test_runtime_regressions:
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_irq_wrappers.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_startup_timing.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_sweep_snapshot.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_snp_import.py

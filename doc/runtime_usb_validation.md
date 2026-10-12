@@ -8,6 +8,13 @@ enforces RF settling/discard timing. Capture and PLL waits handle timer rollover
 ADC startup has bounded readiness/calibration waits, and board initialization
 is performed once. Sweep-start settling is applied only to the first point.
 
+The compact DMA and EXTI handlers on both boards now use the ChibiOS interrupt
+entry/exit hooks. A timer interrupt nested inside audio DMA can wake the sleeping
+sweep task, but defers scheduling until the outer interrupt exits. Without that
+exit hook the ready task could remain unscheduled until an unrelated interrupt,
+such as USB, arrived. This caused battery-only stalls and watchdog reset loops
+that a computer USB connection masked.
+
 USB data waits for a complete, postprocessed sweep and protects its single
 buffer until the reader releases it. Incomplete sweeps and failed SD imports
 are not published. Pending readers can run before the next writer starts.
@@ -31,6 +38,29 @@ NanoVNA-Saver sweep on COM13 with the integration image.
 Host regression and sanitizer suites pass independently on this branch. Both target
 builds use WSL ARM GCC 14.2.1; F072 requires USE_LTO=yes with this toolchain.
 There is no physical NanoVNA-H test or exhaustive RF accuracy/settling claim.
+
+### Battery-only scheduling follow-up (2026-10-12)
+
+On the same H4 rev4.4 / ZeeTK hardware, the user observed a stall after unplugging
+computer USB and a reset loop at battery-only startup. A power bank did not restore
+operation; reconnecting computer USB did. Diagnostic firmware recorded an independent
+watchdog reset (RCC CSR `24000003`) during the reset loop. A separate stall had no new
+reset; its reconnect snapshot showed the sweep in `CH_STATE_READY`, with saved return
+addresses in `chSchGoSleepTimeoutS`, `chThdSleep`, and `sweep_service_wait_for_capture`.
+
+The new host regression models a higher-priority timer wakeup nested inside each
+production DMA/EXTI wrapper. It fails on the old wrappers and passes after the fix,
+covering all 20 wrappers and empty interrupt flags, also under ASan/UBSan.
+
+The corrected H4 integration image was flashed and verified; the entire saved-data
+region was read back and compared byte for byte with its pre-flash backup. After
+being asked to test unplugging, battery-only startup, and touch/roller operation in
+ANT/VNA modes, the user reported it was working well and would continue testing.
+This follow-up image includes antenna features and temporary diagnostics; those
+changes are not part of this PR. Extended battery testing remains in progress.
+
+SHA-256 of that hardware-tested H4 integration image:
+`1f95ff467ca8fb5215b2506ba6e89c50ee18c7d6cfd398342b8496d5ce0b0cbc`.
 
 The ZeeTK RF profile and Antenna Mode are separate work. The snapshot API still
 supports one USB reader, not multiple concurrent snapshot consumers. Slow-host,
