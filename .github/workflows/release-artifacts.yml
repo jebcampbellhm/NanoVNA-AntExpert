@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
@@ -35,7 +35,7 @@ jobs:
       # Restore APT cache
       - name: Restore APT user cache
         id: apt-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             .apt/archives
@@ -83,7 +83,7 @@ jobs:
 
       - name: Save APT user cache (unique key)
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: |
             .apt/archives
@@ -108,7 +108,7 @@ jobs:
 
       - name: Restore ccache
         id: ccache-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ${{ env.CCACHEDIR }}
           key: ccache-${{ env.OSNAME }}-${{ matrix.target }}-${{ steps.gccver.outputs.ver }}-${{ hashFiles('Makefile','config/**','boards/**','include/**','src/**','tools/**') }}
@@ -137,7 +137,7 @@ jobs:
 
       - name: Restore build cache
         id: build-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: build
           key: build-${{ env.OSNAME }}-${{ matrix.target }}-${{ steps.gccver.outputs.ver }}-${{ hashFiles('Makefile','config/**','boards/**','include/**','src/**','tools/**') }}
@@ -205,7 +205,7 @@ jobs:
           done
 
       - name: Upload assets to release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: |
@@ -226,14 +226,14 @@ jobs:
 
       - name: Save build cache
         if: success()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: build
           key: build-${{ env.OSNAME }}-${{ matrix.target }}-${{ steps.gccver.outputs.ver }}-${{ hashFiles('Makefile','config/**','boards/**','include/**','src/**','tools/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Save ccache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ${{ env.CCACHEDIR }}
           key: ccache-${{ env.OSNAME }}-${{ matrix.target }}-${{ steps.gccver.outputs.ver }}-${{ hashFiles('Makefile','config/**','boards/**','include/**','src/**','tools/**') }}-${{ github.run_id }}-${{ github.run_attempt }}

@@ -9,6 +9,25 @@ These illustrations are generated with the firmware font/rendering code and
 synthetic measurements. They show controls and layout, not expected antenna SWR.
 The hardware help panel is production-rendered; its menu outline is host-rendered.
 
+## VNA and ANT are two views of the same instrument
+
+The standard VNA screens and functions remain available, including Smith-chart
+and trace views, stimulus controls, measurement tools and normal VNA calibration.
+ANT is an additional interface. Slots 5/6 are protected for ANT; ordinary saves
+continue to use slots 0–4.
+
+![VNA main menu: ANTENNA is the top item](images/antenna-expert/vna-menu.png)
+
+Tap the VNA screen or press the roller, then choose **ANTENNA**. To return, tap
+**VNA** at the upper right of a single-band or TUNE screen. In MULTI, tap a band
+card to open that screen first.
+
+![ANT single-band screen: VNA returns to the standard interface](images/antenna-expert/ant-return.png)
+
+These two images are actual USB screen captures from the development H4. ANT/VNA
+selection is saved automatically across power cycles. ANT restarts on 20 m at
+101 points; the last band, TUNE/MULTI page and overview contents are not restored.
+
 ## 1. Select hardware on first use
 
 ![Hardware selection](images/antenna-expert/hardware-mode.png)
@@ -26,7 +45,7 @@ MCU identification. Match the board/component markings:
 | ZEETK | ZeeTK H4 rev4.4, NE602A mixers and SJWCH5351 clock |
 
 Choose the matching option and tap **SAVE CONFIG**. Later, reopen it through
-**CONFIG → DEVICE → MORE → MODE**. Changing RF mode clears confirmation and
+**SYSTEM → DEVICE → MORE → MODE**. Changing RF mode clears confirmation and
 active calibration; save the selection and recalibrate. The hardware **MULTI**
 option is unrelated to the **MULTI HF** antenna overview.
 

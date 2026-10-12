@@ -11,7 +11,11 @@ NanoVNA-AntExpert builds on [momentics/NanoVNA-X](https://github.com/momentics/N
 and its ChibiOS runtime. The `antenna_expert` branch adds an antenna-focused
 workflow for the **480 × 320 NanoVNA-H4**: readable SWR screens, amateur-band
 presets, guided calibration and an eight-band HF overview. The ordinary VNA
-interface is still available.
+interface is preserved: the standard VNA screens and functions remain available,
+including Smith charts, trace/display controls, stimulus settings, measurements,
+and the ordinary VNA calibration workflow. ANT adds another way to use the H4;
+it does not replace the standard VNA interface. The two ANT calibration slots
+(5/6) are reserved for the walkthrough; ordinary VNA saves use slots 0–4.
 
 **No SD card is needed** for hardware setup, antenna calibration, saved favorites,
 single-band sweeps, tuning or the multiband overview. Settings and the two ANT
@@ -20,9 +24,31 @@ inherited export and file features.
 
 ![Eight-band HF overview](doc/images/antenna-expert/multi.png)
 
-*Screen illustrations use the firmware's fonts and rendering code with synthetic
+*Unless explicitly labeled as USB captures, screen illustrations use the firmware's fonts and rendering code with synthetic
 RF data; they are not measured antenna results. The hardware-mode illustration
 uses the production help panel with a host-rendered menu outline.*
+
+## Switch between VNA and ANT
+
+1. From the normal VNA display, **tap the screen or press the roller** to open
+   the main menu. Tap **ANTENNA** at the top.
+2. From an ANT single-band or TUNE screen, tap **VNA** in the upper-right corner.
+   From MULTI, tap a band card first, then **VNA** on its detail screen.
+3. **Your interface choice is saved between boots:** power off in ANT and it
+   starts in ANT; switch to VNA and the next boot starts in VNA. This remembers
+   the interface, not the last ANT band or MULTI page: ANT starts at 20 m/101 points.
+
+| Normal VNA: open the main menu, then ANTENNA | ANT: tap VNA at the upper right |
+| --- | --- |
+| ![VNA main menu with ANTENNA](doc/images/antenna-expert/vna-menu.png) | ![ANT screen with VNA return button](doc/images/antenna-expert/ant-return.png) |
+
+The screenshots above are USB captures from the development H4, not mockups.
+[View the normal VNA screen without its menu](doc/images/antenna-expert/vna-screen.png).
+
+**CW/data cues:** on MULTI, red vertical lines mark the stored CW/data boundaries
+(no line on 30 m). On single-band sweeps, the red bar **below the graph** marks
+that portion of the band; the 30 m bar spans the whole band. These use the dated
+Extra-class bandplan described in the [operating guide](doc/antenna_expert.md).
 
 ## What this branch adds
 
@@ -110,6 +136,19 @@ Use an Arm GNU toolchain and Ubuntu/WSL; development builds currently use Arm GC
 the linker must continue to protect saved calibration storage. Detailed
 prerequisites and USB DFU instructions are in [the build guide](doc/building.md).
 Firmware is flashed over USB DFU, not by putting a `.dfu` file on an SD card.
+
+## Firmware checksums
+
+CI downloads now include `H4-SHA256SUMS.txt` and `H4-build-info.txt`, recording the
+binary/package hashes, source commit, compiler and target. Compare `.bin` with
+`.bin`; a `.dfu` container or artifact ZIP has a different hash.
+
+The CI firmware and the development unit's last verified flashed image are
+**not byte-identical**: CI used Arm GCC 13.2.1, the local build used 14.2.1, and
+firmware embeds the build date/time. A later local rebuild differed from the
+flashed image in only four timestamp bytes. See the
+[dated hash comparison](doc/firmware_hashes.md) for the exact artifacts and limits
+of this check. Matching source does not imply matching binary hashes.
 
 ## Project notes and credits
 

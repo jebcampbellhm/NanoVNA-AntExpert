@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
@@ -35,7 +35,7 @@ jobs:
       # APT user cache: ключ разделён по TARGET, restore со стабильным ключом и fallback префикса
       - name: Restore APT user cache
         id: apt-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             .apt/archives
@@ -82,7 +82,7 @@ jobs:
 
       - name: Save APT user cache (unique key)
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: |
             .apt/archives
@@ -108,7 +108,7 @@ jobs:
       # Восстановить ccache стабильным ключом
       - name: Restore ccache
         id: ccache-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ${{ env.CCACHEDIR }}
           key: ccache-${{ env.OSNAME }}-${{ matrix.target }}-${{ steps.gccver.outputs.ver }}-${{ hashFiles('Makefile','config/**','boards/**','include/**','src/**','tools/**') }}
@@ -145,7 +145,7 @@ jobs:
       # Восстановить build-кеш стабильным ключом
       - name: Restore build cache
         id: build-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: build
           key: build-${{ env.OSNAME }}-${{ matrix.target }}-${{ steps.gccver.outputs.ver }}-${{ hashFiles('Makefile','config/**','boards/**','include/**','src/**','tools/**') }}
@@ -202,15 +202,33 @@ jobs:
             echo "tools/makedfu.py not found, skipping DFU generation"
           fi
 
+      - name: Record firmware checksums and build provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          project='${{ steps.project.outputs.name }}'
+          {
+            echo "repository=$GITHUB_REPOSITORY"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "target=$TARGET"
+            echo "version=$(cat VERSION)"
+            echo "compiler=$(arm-none-eabi-gcc --version | head -n 1)"
+            echo "make_options=USE_LTO=yes"
+            echo "run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > "build/${project}-build-info.txt"
+          (cd build && sha256sum "${project}.bin" "${project}.hex" "${project}.dfu" > "${project}-SHA256SUMS.txt")
+
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: NanoVNA-X-${{ matrix.target }}
+          name: NanoVNA-AntExpert-${{ matrix.target }}
           if-no-files-found: error
           path: |
             build/${{ steps.project.outputs.name }}.bin
             build/${{ steps.project.outputs.name }}.hex
             build/${{ steps.project.outputs.name }}.dfu
+            build/${{ steps.project.outputs.name }}-SHA256SUMS.txt
+            build/${{ steps.project.outputs.name }}-build-info.txt
 
       # Лёгкий backoff перед сохранениями, чтобы снизить вероятность гонок резервирования ключей
       - name: Backoff before saving caches
@@ -222,7 +240,7 @@ jobs:
       # Сохранение build-кеша уникальным ключом этого запуска
       - name: Save build cache
         if: success()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: build
           key: build-${{ env.OSNAME }}-${{ matrix.target }}-${{ steps.gccver.outputs.ver }}-${{ hashFiles('Makefile','config/**','boards/**','include/**','src/**','tools/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -230,7 +248,7 @@ jobs:
       # Сохранение ccache уникальным ключом этого запуска
       - name: Save ccache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ${{ env.CCACHEDIR }}
           key: ccache-${{ env.OSNAME }}-${{ matrix.target }}-${{ steps.gccver.outputs.ver }}-${{ hashFiles('Makefile','config/**','boards/**','include/**','src/**','tools/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
