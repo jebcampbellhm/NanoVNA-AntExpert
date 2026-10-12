@@ -440,6 +440,7 @@ test: tests
 		"$$suite"; \
 	done
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_startup_timing.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_reset_cause.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_sweep_snapshot.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_antenna_ui.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_marker_frequency.py

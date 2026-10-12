@@ -30,6 +30,10 @@ extern "C" {
 #endif
 
 int runtime_main(void);
+#ifdef NANOVNA_F303
+#include <stdint.h>
+extern uint32_t runtime_reset_flags;
+#endif
 
 #ifdef __cplusplus
 }

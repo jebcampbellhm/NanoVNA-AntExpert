@@ -21,6 +21,7 @@
 #include "ch.h"
 #include "hal.h"
 #include "nanovna.h"
+#include "runtime/runtime_entry.h"
 #include "sys/state_manager.h"
 #include "driver/si5351.h"
 #include "ui/ui_menu.h"
@@ -65,13 +66,18 @@ static void ui_show_version(void) {
     } while (shift & 1);
     lcd_drawstring(x, y += str_height - 5, info_about[i++]);
   }
+#ifdef NANOVNA_F303
+  lcd_printf(x, y += str_height, "Reset flags: %08x", runtime_reset_flags);
+#else
   lcd_drawstring(x, y += str_height, __DATE__ " " __TIME__);
+#endif
 //lcd_drawstring(x, y += str_height, USING_OS_NAME);
 //lcd_drawstring(x, y += str_height, MCU_NAME);
 
   // Wait for release of entry button first
   systime_t start = chVTGetSystemTimeX();
   while (ui_input_get_buttons() != 0) {
+    wdgReset(&WDGD1);
     chThdSleepMilliseconds(10);
     if (chVTTimeElapsedSinceX(start) > MS2ST(30000))
       return;
@@ -80,6 +86,7 @@ static void ui_show_version(void) {
   // Wait for input or timeout
   int tstat = 0;
   while (1) {
+    wdgReset(&WDGD1);
     if (chVTTimeElapsedSinceX(start) > MS2ST(30000))
       break;
     if (ui_input_check() != 0)
@@ -94,8 +101,10 @@ static void ui_show_version(void) {
   // Wait for release
   if (tstat != 0)
     touch_wait_release();
-  while (ui_input_get_buttons() != 0)
+  while (ui_input_get_buttons() != 0) {
+    wdgReset(&WDGD1);
     chThdSleepMilliseconds(100);
+  }
   request_to_redraw(REDRAW_ALL);
 }
 

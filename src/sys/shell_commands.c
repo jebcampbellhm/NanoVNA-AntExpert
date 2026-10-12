@@ -1079,6 +1079,7 @@ VNA_SHELL_FUNCTION(cmd_help) {
   }
   shell_printf(VNA_SHELL_NEWLINE_STR);
 }
+VNA_SHELL_FUNCTION(cmd_info) __attribute__((optimize("Os")));
 VNA_SHELL_FUNCTION(cmd_info) {
   (void)argc;
   (void)argv;
@@ -1086,6 +1087,9 @@ VNA_SHELL_FUNCTION(cmd_info) {
   while (info_about[i]) {
     shell_printf("%s" VNA_SHELL_NEWLINE_STR, info_about[i++]);
   }
+#ifdef NANOVNA_F303
+  shell_printf("Reset flags: %08x" VNA_SHELL_NEWLINE_STR, runtime_reset_flags);
+#endif
 }
 VNA_SHELL_FUNCTION(cmd_version) { shell_printf("%s" VNA_SHELL_NEWLINE_STR, NANOVNA_VERSION_STRING); }
 #if ENABLE_COLOR_COMMAND

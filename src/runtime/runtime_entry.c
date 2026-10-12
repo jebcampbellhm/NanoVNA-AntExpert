@@ -732,7 +732,19 @@ THD_FUNCTION(myshellThread, p) {
 // Profile stack usage (enable threads command by def ENABLE_THREADS_COMMAND) show:
 // Stack maximum usage = 472 bytes (need test more and run all commands), free stack = 40 bytes
 //
+#ifdef NANOVNA_F303
+uint32_t runtime_reset_flags;
+static void capture_reset_flags(void) {
+  // Snapshot before initialization, then clear sticky causes for the next boot.
+  runtime_reset_flags = RCC->CSR;
+  RCC->CSR |= RCC_CSR_RMVF;
+}
+#endif
+
 int runtime_main(void) {
+#ifdef NANOVNA_F303
+  capture_reset_flags();
+#endif
   /*
    * Initialize ChibiOS systems
    */
