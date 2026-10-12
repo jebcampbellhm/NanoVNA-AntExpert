@@ -170,7 +170,7 @@ jobs:
           CPPFLAGS: ${{ env.CPPFLAGS_EXTRA }}
         run: |
           set -euo pipefail
-          make -j"$(nproc)"
+          make USE_LTO=yes -j"$(nproc)"
           ccache -s || true
 
       - name: Prepare release assets

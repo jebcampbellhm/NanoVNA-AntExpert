@@ -21,6 +21,9 @@
 #include "sys/shell_commands.h"
 #include "runtime/runtime_features.h"
 #include "nanovna.h"
+#ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
+#endif
 #include "driver/stm32_peripherals.h"
 #include "driver/si5351.h"
 

@@ -21,6 +21,10 @@
 #include "ch.h"
 #include "hal.h"
 #include "nanovna.h"
+#ifdef NANOVNA_F303
+// Menu composition favors code size; RF capture keeps its own optimization.
+#pragma GCC optimize("Os")
+#endif
 #include "ui/core/ui_core.h"
 #include "ui/core/ui_menu_engine.h"
 #include "ui/menus/menu_system.h"

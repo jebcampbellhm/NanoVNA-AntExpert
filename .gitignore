@@ -24,3 +24,6 @@ TAGS
 .idea/
 .vscode/
 *.swp
+
+# Versioned firmware-rendered documentation screenshots
+!doc/images/antenna-expert/*.png

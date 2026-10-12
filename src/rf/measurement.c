@@ -66,10 +66,11 @@ void measurement_engine_tick(measurement_engine_t* engine) {
     return;
   }
 
-  const uint16_t mask = measurement_pipeline_active_mask(&engine->pipeline);
-
   sweep_service_wait_for_copy_release();
   sweep_service_begin_measurement();
+  if (engine->port != NULL && engine->port->prepare_sweep != NULL)
+    engine->port->prepare_sweep(engine->port);
+  const uint16_t mask = measurement_pipeline_active_mask(&engine->pipeline);
   measurement_engine_publish(engine, EVENT_SWEEP_STARTED, &mask);
   const bool completed =
       measurement_pipeline_execute(&engine->pipeline, request.break_on_operation, mask);

@@ -31,6 +31,7 @@
  * when a sweep aborts.
  */
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -42,6 +43,7 @@
 /* ------------------------------------------------------------------------- */
 /*                         Stubbed sweep service hooks                        */
 
+static int g_prepare_calls;
 static int g_sweep_init_calls;
 static int g_sweep_wait_calls;
 static int g_sweep_begin_calls;
@@ -157,14 +159,24 @@ static void fake_port_handle_result(measurement_engine_port_t* port,
   }
 }
 
+static void fake_prepare_sweep(measurement_engine_port_t* port) {
+  (void)port;
+  assert(g_sweep_wait_calls==1 && g_sweep_begin_calls==1);
+  assert(g_sweep_end_calls==0 && g_sweep_generation_calls==0);
+  assert(g_recorded_event_count==0);
+  ++g_prepare_calls;
+  g_active_mask ^= 0x03u; // Must be sampled AFTER preparation.
+}
 static measurement_engine_port_t g_fake_port = {
     .context = NULL,
     .can_start_sweep = fake_port_can_start,
     .handle_result = fake_port_handle_result,
     .service_loop = fake_port_service_loop,
+    .prepare_sweep = fake_prepare_sweep,
 };
 
 static void reset_stubs(void) {
+  g_prepare_calls = 0;
   g_sweep_init_calls = 0;
   g_sweep_wait_calls = 0;
   g_sweep_begin_calls = 0;
@@ -226,6 +238,7 @@ static void test_tick_without_trigger_sleeps_and_skips_events(void) {
   CHECK(state.can_start_calls == 1, "port should be queried for sweep permission");
   CHECK(g_sleep_calls == 1, "engine should sleep when idle");
   CHECK(g_recorded_event_count == 0, "no events must be published when idle");
+  CHECK(g_prepare_calls == 0, "paused engine must not prepare/advance a band");
   CHECK(g_sweep_begin_calls == 0, "sweep helpers must not run when idle");
 }
 
@@ -244,6 +257,7 @@ static void test_tick_completed_sweep_publishes_events(void) {
   state.next_break_flag = false;
   measurement_engine_tick(&engine);
 
+  CHECK(g_prepare_calls == 1, "prepare runs exactly once under snapshot ownership");
   CHECK(g_sweep_wait_calls == 1, "sweep copy wait must run");
   CHECK(g_sweep_begin_calls == 1, "sweep begin must run");
   CHECK(g_sweep_end_calls == 1, "sweep end must run");

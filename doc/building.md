@@ -1,4 +1,4 @@
-# Building the NanoVNA-X firmware
+# Building NanoVNA-AntExpert
 
 [Русская версия](building_ru.md)
 
@@ -43,8 +43,8 @@ arm-none-eabi-gcc --version
 Clone the repository; all third-party code is vendored directly in-tree:
 
 ```bash
-git clone https://github.com/momentics/NanoVNA-X.git
-cd NanoVNA-X
+git clone --branch antenna_expert https://github.com/jebcampbellhm/NanoVNA-AntExpert.git
+cd NanoVNA-AntExpert
 ```
 
 ### 2.1 Inspect the source tree
@@ -78,9 +78,9 @@ If you omit `TARGET`, the build defaults to `F072`.
 The same image supports the different RF hardware revisions. For NanoVNA-H
 rev3.7 or NanoVNA-H4 rev4.4 with ZeeTK NE602A mixers and an SJWCH5351 clock
 (ZK label), choose `System -> Device -> More -> Mode -> ZeeTK` after flashing,
-then `SAVE MODE` immediately below `MODE` and recalibrate with `CAL POWER` set
-to `AUTO`. The default remains the original Si5351 profile; existing saved modes
-are not changed.
+then `SAVE CONFIG` and recalibrate with `CAL POWER` set
+to `AUTO`. H4 opens hardware guidance when its confirmation flag is missing. Match the
+board markings and save before calibrating; see the [ANT guide](antenna_expert.md).
 
 ## 4. Build the firmware
 
@@ -128,16 +128,18 @@ immediately; flashing via `make flash` or `dfu-util` works with either the raw
 
 ## 6. Flash the device (optional)
 
+For AntExpert/H4, start with the [physical-button DFU and Windows flashing guide](flashing_h4.md).
+
 With the hardware in DFU mode, flash the generated binary using `dfu-util`:
 
 ```bash
-export TARGET=F072
+export TARGET=F303
 make flash
 ```
 
 The `flash` target always uses the binary generated in `build/` for the
 selected board profile. The device must enumerate as a DFU interface on your
-host; see the main README for more detail on entering DFU mode.
+host; see the [button-DFU guide](flashing_h4.md) for entering DFU mode.
 
 ## 7. Troubleshooting
 

@@ -21,6 +21,10 @@
  */
 
 #include <stdbool.h>
+#ifdef NANOVNA_F303
+// Keep display composition inside the protected firmware partition.
+#pragma GCC optimize("Os")
+#endif
 #include <limits.h>
 #include <stdarg.h>
 #include <stdint.h>

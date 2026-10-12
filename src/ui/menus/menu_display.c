@@ -19,6 +19,9 @@
  */
 
 #include "nanovna.h"
+#ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
+#endif
 #include "ui/menus/menu_display.h"
 #include "ui/core/ui_menu_engine.h"
 #include "ui/core/ui_core.h"

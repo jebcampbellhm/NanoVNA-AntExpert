@@ -19,6 +19,9 @@
  */
 
 #include "ui/draw/render.h"
+#ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
+#endif
 #include "chprintf.h"
 
 //**************************************************************************************

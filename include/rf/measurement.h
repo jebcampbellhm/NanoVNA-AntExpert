@@ -56,6 +56,8 @@ struct measurement_engine_port {
   void (*handle_result)(measurement_engine_port_t* port,
                         const measurement_engine_result_t* result);
   void (*service_loop)(measurement_engine_port_t* port);
+  // Runs after snapshot readers release the prior sweep, before the next slice.
+  void (*prepare_sweep)(measurement_engine_port_t* port);
 };
 
 struct measurement_engine {

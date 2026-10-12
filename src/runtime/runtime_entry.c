@@ -260,6 +260,11 @@ static void app_measurement_handle_result(measurement_engine_port_t* port,
   request_to_redraw(REDRAW_PLOT);
 }
 
+static void app_measurement_prepare_sweep(measurement_engine_port_t* port) {
+  (void)port;
+  antenna_ui_prepare_sweep();
+}
+
 static void app_measurement_service_loop(measurement_engine_port_t* port) {
   (void)port;
   shell_service_pending_commands();
@@ -741,7 +746,7 @@ static void capture_reset_flags(void) {
 }
 #endif
 
-int runtime_main(void) {
+__attribute__((optimize("Os"))) int runtime_main(void) {
 #ifdef NANOVNA_F303
   capture_reset_flags();
 #endif
@@ -811,6 +816,7 @@ int runtime_main(void) {
 
   measurement_engine_port.context = NULL;
   measurement_engine_port.can_start_sweep = app_measurement_can_start_sweep;
+  measurement_engine_port.prepare_sweep = app_measurement_prepare_sweep;
   measurement_engine_port.handle_result = app_measurement_handle_result;
   measurement_engine_port.service_loop = app_measurement_service_loop;
   measurement_engine_init(&measurement_engine, &measurement_engine_port, &app_event_bus, drivers);

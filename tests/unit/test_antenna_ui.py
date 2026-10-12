@@ -70,7 +70,8 @@ void lcd_line(int,int,int,int);
 void lcd_set_colors(int,int);
 void lcd_set_foreground(int);
 void lcd_clear_screen(void);
-#define plot_printf snprintf
+int host_printf(char *,size_t,const char *,...);
+#define plot_printf host_printf
 void app_measurement_update_frequencies(void);
 void ui_mode_normal(void);
 void ui_mode_menu(void);
@@ -87,6 +88,7 @@ HARNESS = r'''
 #include "ui/antenna_ui.h"
 #include "processing/antenna.h"
 #include <assert.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 uint32_t frequency0=1000000, frequency1=30000000, cal_frequency0, cal_frequency1;
@@ -98,6 +100,14 @@ float measured[2][401][2];
 const menuitem_t menu_cal_menu[]={1};
 static unsigned writes, messages, updates, menus;
 static bool fail_save;
+static const char *want_min, *want_max;
+static bool saw_min, saw_max;
+int host_printf(char *s,size_t size,const char *fmt,...) {
+  va_list ap; va_start(ap,fmt); int n=vsnprintf(s,size,fmt,ap); va_end(ap);
+  if(want_min && strcmp(s,want_min)==0) saw_min=true;
+  if(want_max && strcmp(s,want_max)==0) saw_max=true;
+  return n;
+}
 static uint16_t pending_redraw;
 static bool menu_visible;
 static unsigned cal_stage, capture_mask;
@@ -233,6 +243,8 @@ int main(void) {
   antenna_ui_touch(260,295);
   assert(frequency0==frequency1 && sweep_points==21);
   uint32_t cw=frequency0; sample(); preview("tune");
+  antenna_ui_touch(425,108); // TUNE keeps its own frequency controls.
+  assert(frequency0==cw && frequency0==frequency1 && sweep_points==21);
   antenna_ui_lever(EVT_UP); assert(frequency0==cw+1750 && frequency0==frequency1);
   antenna_ui_lever(EVT_DOWN); assert(frequency0==cw && sweep_points==21);
   assert(pixels[266][42]==0); // No band rail in fixed-frequency tuning.
@@ -269,6 +281,8 @@ int main(void) {
   antenna_ui_touch(20,95); // 2 m
   assert(frequency0==144000000 && frequency1==148000000);
   sample(); preview("2m");
+  antenna_ui_touch(425,108); // VHF has no MULTI shortcut.
+  assert(frequency0==144000000 && sweep_points==101);
   antenna_ui_touch(20,295); antenna_ui_touch(340,50); preview("favorites");
   antenna_ui_touch(400,295); antenna_ui_touch(400,10);
   assert(!antenna_ui_draw());
@@ -368,6 +382,82 @@ int main(void) {
   unsigned unchanged_updates=updates; saved_writes=writes;
   antenna_ui_lever(EVT_UP); antenna_ui_lever(EVT_DOWN);
   assert(updates==unchanged_updates && writes==saved_writes);
+  // Eight-band overview. Completion retains the measured frequency range;
+  // only the engine's protected preparation hook may advance it.
+  antenna_ui_touch(20,295); antenna_ui_touch(20,15);
+  assert(frequency0==3500000 && sweep_points==51);
+  preview("multi-waiting");
+  const unsigned bands[]={1,3,4,5,6,7,8,9};
+  for(unsigned k=0;k<8;k++) {
+    assert(frequency0==antenna_bands[bands[k]].start);
+    uint32_t f=frequency0;
+    unsigned u=updates;
+    antenna_ui_prepare_sweep(); assert(frequency0==f && updates==u); // No completed sweep yet.
+    // Different synthetic curves make the preview useful; these are not RF measurements.
+    for(unsigned i=0;i<sweep_points;i++) {
+      float d=(float)i/(sweep_points-1)-(0.2f+0.07f*k);
+      measured[0][i][0]=0.05f+0.02f*k+(1.0f+0.15f*k)*d*d;
+      measured[0][i][1]=0;
+    }
+    antenna_ui_measurement(); assert(frequency0==f && updates==u);
+    if(k==0) {
+      preview("multi-first");
+      memcpy(previous,pixels,sizeof pixels);
+      antenna_ui_touch(320,15); assert(!(sweep_mode&SWEEP_ENABLE));
+      antenna_ui_prepare_sweep(); assert(frequency0==f && updates==u);
+      antenna_ui_touch(320,15); assert(sweep_mode&SWEEP_ENABLE);
+    }
+    preview("multi-progress");
+    if(k>0) // Prior band's graph remains pixel-identical while other bands update.
+      for(unsigned y=109;y<=173;y++) for(unsigned x=6;x<=112;x++)
+        assert(pixels[y][x]==previous[y][x]);
+    if(k<7) antenna_ui_prepare_sweep();
+  }
+  preview("multi-eight");
+  for(unsigned k=0;k<8;k++) {
+    const antenna_band_t *b=&antenna_bands[bands[k]];
+    unsigned x=(k%4)*120+6+(uint64_t)(b->cw_data_stop-b->start)*106/(b->stop-b->start);
+    unsigned y=40+(k/4)*140, red=0;
+    for(unsigned row=y+69;row<=y+133;row++) red+=pixels[row][x]==3;
+    if(k==2) assert(red==0); // No CW boundary on 30 m.
+    else assert(red>=50); // Trace may cross the guide, but cannot hide it.
+  }
+  antenna_ui_prepare_sweep(); assert(frequency0==3500000); // Wrap to 80 m.
+  for(unsigned i=0;i<sweep_points;i++) { measured[0][i][0]=0; measured[0][i][1]=0; }
+  measured[0][50][0]=0.5f;
+  antenna_ui_measurement();
+  want_min="MIN 1.00"; want_max="MAX 3.00"; saw_min=saw_max=false;
+  preview("multi-extrema"); assert(saw_min && saw_max);
+  want_min=want_max=NULL;
+  for(unsigned i=0;i<sweep_points;i++) { measured[0][i][0]=1; measured[0][i][1]=0; }
+  antenna_ui_measurement(); preview("multi-high");
+  assert(pixels[109][50]==2); // SWR above 5 clips at the ceiling.
+  antenna_ui_prepare_sweep(); assert(frequency0==7000000);
+  uint32_t nan_bits=0x7fc00000;
+  for(unsigned i=0;i<sweep_points;i++) memcpy(&measured[0][i][0],&nan_bits,4);
+  antenna_ui_measurement(); preview("multi-invalid");
+  for(unsigned y=110;y<173;y++) for(unsigned x=127;x<232;x++)
+    assert(pixels[y][x]!=2); // Invalid samples must never join into a trace.
+  frequency1++; unsigned u=updates;
+  antenna_ui_prepare_sweep(); assert(updates==u); // Don't override USB's changed range.
+  antenna_ui_touch(320,15); assert(frequency1==7300000);
+  antenna_ui_lever(EVT_DOWN); antenna_ui_lever(EVT_BUTTON_SINGLE_CLICK);
+  assert(frequency0==28000000 && sweep_points==401); // Opens selected 10 m detail.
+  sample(); preview("multi-detail");
+  antenna_ui_touch(425,108); // Direct HF detail -> overview, without visiting BANDS.
+  assert(frequency0==3500000 && sweep_points==51);
+  antenna_ui_touch(425,280); // 10 m card -> detail again.
+  assert(frequency0==28000000 && sweep_points==401);
+  antenna_ui_touch(20,295); antenna_ui_touch(20,15);
+  preview("multi-reenter"); // Union cache cleared after single-band reuse.
+  for(unsigned k=0;k<8;k++) {
+    antenna_ui_touch((k%4)*120+60,40+(k/4)*140+100);
+    assert(frequency0==antenna_bands[bands[k]].start && sweep_points==401);
+    antenna_ui_touch(20,295); antenna_ui_touch(20,15);
+  }
+  antenna_ui_touch(430,15); // BANDS remains accessible without a bottom menu.
+  antenna_ui_touch(400,295); antenna_ui_touch(400,10);
+  assert(!antenna_ui_draw());
   puts("antenna UI transitions, mode persistence, favorites roller, bounds and rendering passed");
 }
 '''

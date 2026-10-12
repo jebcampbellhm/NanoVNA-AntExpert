@@ -19,6 +19,9 @@
  */
 
 #include "ui/draw/grid.h"
+#ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
+#endif
 
 //**************************************************************************************
 // Plot area draw grid functions

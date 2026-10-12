@@ -2,7 +2,7 @@ name: Firmware CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ antenna_expert, main, master ]
   pull_request:
 
 jobs:
@@ -173,7 +173,7 @@ jobs:
           if [ "${CLEAN-0}" = "1" ]; then
             make clean
           fi
-          make -j"$(nproc)"
+          make USE_LTO=yes -j"$(nproc)"
           ccache -s || true
 
       - name: Determine project name

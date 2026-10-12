@@ -27,6 +27,10 @@
 #endif
 
 #include "nanovna.h"
+#ifdef NANOVNA_F303
+// USB command handling is not RF timing-critical; keep the UI within the code partition.
+#pragma GCC optimize("Os")
+#endif
 #include "driver/usbcfg.h"
 #include "rf/sweep.h"
 #include "runtime/runtime_entry.h"

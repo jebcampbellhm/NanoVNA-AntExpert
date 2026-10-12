@@ -21,6 +21,9 @@
 #include "ch.h"
 #include "hal.h"
 #include "nanovna.h"
+#ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
+#endif
 #include "ui/ui_menu.h"
 #include "ui/core/ui_core.h" // For globals/ui_mode/etc if needed
 #include "ui/core/ui_menu_engine.h" // For menu_dynamic_acquire, etc

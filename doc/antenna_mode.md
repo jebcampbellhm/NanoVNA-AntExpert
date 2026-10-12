@@ -1,4 +1,7 @@
-# H4 Antenna Mode (development branch)
+# H4 Antenna Mode — implementation and validation history
+
+For current operating instructions, see [the illustrated AntExpert guide](antenna_expert.md).
+Dated build results below are historical checkpoints, not the latest build status.
 
 ## Release notes draft
 
@@ -39,11 +42,9 @@ clamp to the start instead of wrapping to the end.
   The instrument measures 21 points at that same frequency and displays the middle
   sample after each completed sweep. This is continuous updating, not instantaneous
   feedback; RF bandwidth and settling settings still determine update speed.
-- **CAL:** return to a sweep of the whole preset and open the existing calibration
-  workflow. Perform the usual open/short/load calibration on CH0 and save it there.
-  This temporarily uses the VNA plot and calibration menu; closing the menu
-  returns to Antenna. The pending full-screen clear is consumed before the CAL
-  menu is repainted, so it cannot erase the menu buttons on the next redraw.
+- **CAL:** open the protected HF ANT / V/U ANT walkthrough. Capture OPEN, SHORT
+  and 50-ohm LOAD for both selected profiles, then SAVE to internal slots 5/6.
+  See the [current guide](antenna_expert.md#2-calibrate-hf-and-vhfuhf-together).
 - **VNA:** restore the prior frequency range, point count, frequency/time-domain
   selection, reference impedance, and running/paused state. Calibration changes
   made while in Antenna Mode remain available.
@@ -312,3 +313,66 @@ The image was flashed, readback-verified and started on 205431682033. A full bac
 was taken first, and storage from `0x0801C800` through the end of flash was confirmed
 unchanged before restart. Physical OSL accuracy, both-profile capture/save/restart,
 mode-confirmation persistence and USB/Saver regression checks remain pending.
+
+
+## HF multiband overview
+
+In ANT, open BANDS then MULTI HF. Eight mini plots cover 80/75, 40, 30,
+20, 17, 15, 12 and 10 metres. Each complete 51-point band sweep replaces
+only that band's cached data; the display continues to compose complete LCD
+strips without exposing an intermediate VNA background. The eight bands are
+measured sequentially, not simultaneously. MIN/MAX are sampled extrema across
+the whole band, not interpolated resonance estimates. Curves share a 1–5 SWR
+scale with dashed 2:1 and 3:1 guides; numerical extrema remain unclipped up to
+99.9, then show 99.9+. Missing data displays --; invalid samples break the curve
+and add ! beside the extrema. CAL/UNCAL describes each cached measurement.
+
+PAUSE/RUN holds or resumes scanning. Tap a card to open its ordinary ANT view
+at the selected single-band point count (101 by default). Roller rotation
+selects a card; pressing opens it. BANDS returns to the picker. Re-entering
+MULTI HF starts a fresh overview; startup still restores ANT's single-band view.
+The overview is a fixed initial HF selection and does not alter saved favorites.
+
+The cache shares the existing 401-float CCM allocation with the single-band
+curve; it does not allocate a framebuffer or another calibration record.
+Automatic range transitions run in the engine's preparation callback, after
+snapshot readers release the previous sweep and before the next channel mask
+is calculated. No band advances on a partial sweep or while paused. External
+range changes suspend advancement until the user resumes the overview.
+Protected HF ANT calibration is interpolated at each band's 51 frequencies.
+
+Hardware checks for this addition: enter MULTI HF, let all eight plots populate,
+pause/resume, open every card, rotate/press the roller, and check a fresh
+battery-only startup. Verify real calibrated SWR against single-band readings;
+previews use synthetic data and do not establish RF accuracy.
+
+Multiband validation (2026-10-12): normal and ASan/UBSan host suites passed,
+including extrema, cache retention, eight-band cycling, pause, invalid samples,
+card/roller navigation and engine snapshot ownership. WSL H4 and H builds passed.
+H4 text/data/bss: 116180/552/48468; binary 116732 bytes, erase-rounded end
+0x0801C800. The code partition is almost full (4 bytes spare); further additions
+require size savings. Menu/display and USB command paths use size optimization;
+RF capture retains O2. Temporary USB stack/phase diagnostics were removed; reset
+cause reporting and the verified IRQ scheduling fix remain.
+
+Flashed H4 SHA-256:
+`25b7e1f9f2157c63d59d7810e7e73c2f625be4c566d2ed989564157ebb1c2d81`.
+CubeProgrammer verified the image on device 205431682033 and started it. All
+145408 bytes at/above 0x0801C800 matched the pre-flash backup before startup.
+Artifacts and previews: `../NanoVNA-X-builds/antenna-multiband/`.
+Physical multiband display, battery and RF checks are awaiting user feedback.
+
+
+### Direct return and CW guides (2026-10-12)
+
+HF single-band sweep pages now move the frequency left and provide a MULTI
+button beside it, returning directly to a fresh overview. TUNE and VHF/UHF do
+not show this shortcut. Overview plots mark the existing Extra-class CW/data
+boundary with a red vertical line; 30 m deliberately has no line.
+UI tests pass normally and under ASan/UBSan, including direct return, exclusion
+from TUNE/VHF, and guide positions/30 m omission. The WSL H4 build is 116576 bytes
+(160 bytes below the code boundary); H4-only display size optimizations preserve
+the RF optimization settings. Flashed and verified on device 205431682033;
+all saved data remained identical before restart. Artifact directory:
+`../NanoVNA-X-builds/antenna-multi-shortcut/`. SHA-256:
+`de8ff3ad6aab14ce49722a81d406428c9595a01ecea590631243e62a9b0d78dc`.

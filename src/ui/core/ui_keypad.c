@@ -21,6 +21,9 @@
 #include "ch.h"
 #include "hal.h"
 #include "nanovna.h"
+#ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
+#endif
 #include "ui/core/ui_core.h"
 #include "ui/core/ui_keypad.h"
 #include "ui/draw/display_presenter.h"
