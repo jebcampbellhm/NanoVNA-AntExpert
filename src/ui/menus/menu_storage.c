@@ -32,6 +32,7 @@
 #include "chprintf.h"
 #include <string.h>
 #include "sys/config_service.h"
+#include "rf/sweep.h"
 #include "sys/state_manager.h" // For state_manager_force_save if needed
 #include "driver/board_events.h" // For boardDFUEnter if referenced? No, local DFU is System.
 
@@ -85,7 +86,7 @@ static FILE_SAVE_CALLBACK(save_snp) {
   return res;
 }
 
-static FILE_LOAD_CALLBACK(load_snp) {
+static FILE_LOAD_CALLBACK(load_snp_data) {
   (void)fno;
   UINT size;
   const int buffer_size = 256;
@@ -94,7 +95,8 @@ static FILE_LOAD_CALLBACK(load_snp) {
   char* line = buf_8 + buffer_size;
   uint16_t j = 0, i, count = 0;
   freq_t start = 0, stop = 0, freq;
-  while (f_read(f, buf_8, buffer_size, &size) == FR_OK && size > 0) {
+  FRESULT status;
+  while ((status = f_read(f, buf_8, buffer_size, &size)) == FR_OK && size > 0) {
     for (i = 0; i < size; i++) {
       uint8_t c = buf_8[i];
       if (c == '\r') {
@@ -102,7 +104,7 @@ static FILE_LOAD_CALLBACK(load_snp) {
         j = 0;
         char* args[16];
         int nargs = parse_line(line, args, 16);
-        if (nargs < 2 || args[0][0] == '#' || args[0][0] == '!')
+        if (nargs < 3 || args[0][0] == '#' || args[0][0] == '!')
           continue;
         freq = my_atoui(args[0]);
         if (count >= SWEEP_POINTS_MAX || freq > FREQUENCY_MAX)
@@ -112,7 +114,7 @@ static FILE_LOAD_CALLBACK(load_snp) {
         stop = freq;
         measured[0][count][0] = my_atof(args[1]);
         measured[0][count][1] = my_atof(args[2]);
-        if (format == FMT_S2P_FILE && nargs >= 4) {
+        if (format == FMT_S2P_FILE && nargs >= 5) {
           measured[1][count][0] = my_atof(args[3]);
           measured[1][count][1] = my_atof(args[4]);
         } else {
@@ -126,6 +128,9 @@ static FILE_LOAD_CALLBACK(load_snp) {
         line[j++] = (char)c;
     }
   }
+  // A read failure after valid rows is not a successful (shorter) sweep.
+  if (status != FR_OK)
+    return "Read error";
   if (count != 0) {
     pause_sweep();
     current_props._electrical_delay[0] = 0.0f;
@@ -135,7 +140,17 @@ static FILE_LOAD_CALLBACK(load_snp) {
     set_sweep_frequency(ST_STOP, stop);
     request_to_redraw(REDRAW_PLOT);
   }
-  return NULL;
+  return count != 0 ? NULL : "Empty file";
+}
+
+static FILE_LOAD_CALLBACK(load_snp) {
+  // File imports replace the same buffer used by sweeps and USB snapshots.
+  sweep_service_begin_measurement();
+  const char* error = load_snp_data(f, fno, format);
+  sweep_service_end_measurement();
+  if (error == NULL)
+    sweep_service_increment_generation();
+  return error;
 }
 
 //=====================================================================================================

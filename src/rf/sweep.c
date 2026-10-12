@@ -34,7 +34,8 @@
 /*
  * DMA/I2S capture state
  */
-static systime_t ready_time = 0;
+static systime_t capture_start = 0;
+static systime_t capture_delay = 0;
 static volatile uint16_t wait_count = 0;
 static alignas(8) audio_sample_t rx_buffer[AUDIO_BUFFER_LEN * 2];
 
@@ -50,6 +51,9 @@ static int16_t dump_selection = 0;
 static volatile bool sweep_in_progress = false;
 static volatile bool sweep_copy_in_progress = false;
 static volatile uint32_t sweep_generation = 0;
+static bool sweep_snapshot_valid = false;
+static bool sweep_snapshot_pending = false;
+static uint16_t sweep_snapshot_points = 0;
 static uint16_t p_sweep = 0;
 static uint8_t sweep_state_flags = 0;
 static volatile bool sweep_cancel_request = false;
@@ -245,7 +249,7 @@ static void duplicate_buffer_to_dump(audio_sample_t* p, size_t n) {
 
 void i2s_lld_serve_rx_interrupt(uint32_t flags) {
   uint16_t wait = wait_count;
-  if (wait == 0U || chVTGetSystemTimeX() < ready_time) {
+  if (wait == 0U || (systime_t)(chVTGetSystemTimeX() - capture_start) < capture_delay) {
     return;
   }
   audio_sample_t* p = (flags & STM32_DMA_ISR_TCIF) ? rx_buffer + AUDIO_BUFFER_LEN : rx_buffer;
@@ -270,6 +274,9 @@ void sweep_service_init(event_bus_t* bus) {
   sweep_in_progress = false;
   sweep_copy_in_progress = false;
   sweep_generation = 0;
+  sweep_snapshot_valid = false;
+  sweep_snapshot_pending = false;
+  sweep_snapshot_points = 0;
   sweep_reset_progress();
   sweep_state_flags = 0;
   sweep_cancel_request = false;
@@ -295,15 +302,24 @@ void sweep_service_wait_for_copy_release(void) {
     if (!busy) {
       break;
     }
-    chThdYield();
+    // The USB shell may have lower priority; yielding cannot let it release.
+    chThdSleepMilliseconds(1);
   }
 }
 
 void sweep_service_begin_measurement(void) {
-  osalSysLock();
-  sweep_in_progress = true;
-  sweep_cancel_request = false;
-  osalSysUnlock();
+  while (true) {
+    osalSysLock();
+    if (!sweep_copy_in_progress && !(sweep_snapshot_pending && sweep_snapshot_valid)) {
+      sweep_in_progress = true;
+      sweep_snapshot_valid = false;
+      sweep_cancel_request = false;
+      osalSysUnlock();
+      return;
+    }
+    osalSysUnlock();
+    chThdSleepMilliseconds(1);
+  }
 }
 
 void sweep_service_end_measurement(void) {
@@ -315,6 +331,8 @@ void sweep_service_end_measurement(void) {
 uint32_t sweep_service_increment_generation(void) {
   osalSysLock();
   uint32_t generation = ++sweep_generation;
+  sweep_snapshot_points = sweep_points;
+  sweep_snapshot_valid = true;
   osalSysUnlock();
   return generation;
 }
@@ -345,14 +363,18 @@ bool sweep_service_snapshot_acquire(uint8_t channel, sweep_service_snapshot_t* s
   }
   systime_t start_time = chVTGetSystemTimeX();
   systime_t timeout = MS2ST(2000); // 2 second timeout to prevent infinite wait
+  osalSysLock();
+  sweep_snapshot_pending = true;
+  osalSysUnlock();
   
   while (true) {
     osalSysLock();
-    bool busy = sweep_in_progress || sweep_copy_in_progress;
+    bool busy = sweep_in_progress || sweep_copy_in_progress || !sweep_snapshot_valid;
     if (!busy) {
       sweep_copy_in_progress = true;
+      sweep_snapshot_pending = false;
       snapshot->generation = sweep_generation;
-      snapshot->points = sweep_points;
+      snapshot->points = sweep_snapshot_points;
       snapshot->data = measured[channel];
       osalSysUnlock();
       return true;
@@ -361,6 +383,9 @@ bool sweep_service_snapshot_acquire(uint8_t channel, sweep_service_snapshot_t* s
     
     // Check for timeout
     if (chVTGetSystemTimeX() - start_time >= timeout) {
+      osalSysLock();
+      sweep_snapshot_pending = false;
+      osalSysUnlock();
       return false; // Timeout occurred, unable to acquire snapshot
     }
     
@@ -380,8 +405,12 @@ bool sweep_service_snapshot_release(const sweep_service_snapshot_t* snapshot) {
 }
 
 void sweep_service_start_capture(systime_t delay_ticks) {
-  ready_time = chVTGetSystemTimeX() + delay_ticks;
+  // Publish the timer pair and arm capture atomically with respect to DMA IRQs.
+  osalSysLock();
+  capture_start = chVTGetSystemTimeX();
+  capture_delay = delay_ticks;
   wait_count = config._bandwidth + 2U;
+  osalSysUnlock();
 }
 
 bool sweep_service_wait_for_capture(void) {
@@ -396,7 +425,11 @@ bool sweep_service_wait_for_capture(void) {
       wait_count = 0;
       return false;
     }
-    __WFI();
+    // The sweep task has higher priority than the USB shell. WFI only idles
+    // the CPU; it leaves this task runnable and can starve the shell forever.
+    // Sleep for one RTOS tick (clamped by the tickless timer's minimum delta)
+    // while DMA continues collecting samples and enforcing the RF delay.
+    chThdSleep(1);
   }
   return true;
 }
@@ -598,7 +631,7 @@ static void fsm_setup_freq(rf_fsm_context_t* ctx) {
   }
   ctx->total_cycles = extra_cycles + 1U;
   ctx->current_cycle = 0;
-  ctx->st_delay = DELAY_SWEEP_START; 
+  ctx->st_delay = p_sweep == 0U ? DELAY_SWEEP_START : 0;
   ctx->state = RF_STATE_SETUP_MEASURE;
 }
 
@@ -686,8 +719,7 @@ bool app_measurement_sweep(bool break_on_operation, uint16_t mask) {
      ctx.offset = vna_expf(s21_offset * (logf(10.0f) / 20.0f));
   }
   
-  sweep_in_progress = true;
-  sweep_service_wait_for_copy_release();
+  sweep_service_begin_measurement();
   
   if (p_sweep >= sweep_points || !break_on_operation) {
     sweep_reset_progress();

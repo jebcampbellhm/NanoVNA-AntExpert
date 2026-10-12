@@ -358,6 +358,7 @@ ULIBS = -lm
 
 # Host-side unit tests  
 HOST_CC ?= gcc
+HOST_PYTHON ?= python3
 HOST_CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2 -fno-inline-small-functions -ggdb -fomit-frame-pointer -falign-functions=16 -ffast-math -fsingle-precision-constant -fmerge-constants
 HOST_LDFLAGS ?= -lm
 
@@ -461,3 +462,11 @@ else
 	@etags *.[ch] boards/STM32F072/*.[ch] $(shell find third_party/ChibiOS -name \*.\[ch\] -print)
 endif
 	@ls -l TAGS
+
+.PHONY: test_runtime_regressions
+test: test_runtime_regressions
+test_runtime_regressions:
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_startup_timing.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_sweep_snapshot.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_snp_import.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_usb_control.py

@@ -34,3 +34,17 @@ Failures are reported with descriptive messages.
 2. Reuse existing stubs or add new ones (e.g. mock `ch.h`) under `tests/stubs/`.
 3. Keep test comments verbose—CI logs must tell a future maintainer what a
    regression means without opening the sources.
+
+## Runtime/USB regressions
+
+`make test` also runs Python 3 harnesses compiling the production capture/PLL
+timing, snapshot, SD import, and CDC control functions. They check rollover,
+RTOS blocking, ADC timeouts, completed-buffer publication, reader handoff,
+read failures, and queue preservation across DTR changes. Override HOST_CC
+and HOST_PYTHON as needed. To check memory and undefined behavior:
+
+```sh
+make test TEST_BUILD_DIR=build/tests-sanitized \
+  HOST_CC='gcc -fsanitize=address,undefined -fno-sanitize-recover=all' \
+  HOST_CFLAGS='-std=c11 -Wall -Wextra -O1 -g -fno-omit-frame-pointer'
+```

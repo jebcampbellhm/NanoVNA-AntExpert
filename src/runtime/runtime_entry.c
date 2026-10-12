@@ -755,9 +755,7 @@ int runtime_main(void) {
 
   const PlatformDrivers* drivers = platform_get_drivers();
   if (drivers != NULL) {
-    if (drivers->init) {
-      drivers->init();
-    }
+    // platform_init() already initialized the board peripherals.
     // Display initialization moved to end of startup sequence to match NanoVNA-D reference
     // if (drivers->display && drivers->display->init) {
     //   drivers->display->init();
