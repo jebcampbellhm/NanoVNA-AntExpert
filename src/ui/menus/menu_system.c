@@ -351,6 +351,15 @@ static UI_FUNCTION_ADV_CALLBACK(menu_band_sel_acb) {
   config_service_notify_configuration_changed();
 }
 
+static UI_FUNCTION_CALLBACK(menu_save_mode_cb) {
+  (void)data;
+  if (config_save() != 0)
+    ui_message_box("Save Mode", "Save failed", 1500);
+  else
+    ui_message_box("Save Mode", "Mode saved", 1000);
+  request_to_redraw(REDRAW_ALL);
+}
+
 // RTC Logic
 #ifdef __USE_RTC__
 static UI_FUNCTION_ADV_CALLBACK(menu_rtc_out_acb) {
@@ -405,6 +414,7 @@ const menuitem_t menu_offset[] = {
 
 const menuitem_t menu_device1[] = {
     {MT_ADV_CALLBACK, 0, "MODE\n " R_LINK_COLOR "%s", menu_band_sel_acb},
+    {MT_CALLBACK, 0, "SAVE MODE", menu_save_mode_cb},
 #ifdef __DIGIT_SEPARATOR__
     {MT_ADV_CALLBACK, VNA_MODE_SEPARATOR, "SEPARATOR\n " R_LINK_COLOR "%s", menu_vna_mode_acb},
 #endif

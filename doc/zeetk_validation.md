@@ -79,7 +79,10 @@ On hardware, also test repeated `data` commands during continuous sweeps,
 paused/partial sweeps, time-domain display, and a slow or disconnected USB host.
 
 1. On the matching ZK board, choose `System -> Device -> More -> Mode -> ZeeTK`,
-   save configuration, power-cycle, and confirm the selection persists.
+   tap `Save Mode` immediately below `Mode`, power-cycle, and confirm the selection
+   persists. `Save Mode` writes the configuration (including the selected mode)
+   and reports success or failure without leaving this menu; it does not save a
+   calibration slot.
 2. Select automatic calibration power and collect a fresh open/short/load/thru
    calibration. Do not reuse calibration collected under another RF profile.
 3. Check a 50-ohm load and a through connection over the intended frequency
