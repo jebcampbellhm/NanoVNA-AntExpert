@@ -21,6 +21,7 @@
  */
 
 #include "nanovna.h"
+#include "ui/antenna_ui.h"
 #include "sys/shell_service.h"
 #include "sys/state_manager.h"
 #include "hal.h"
@@ -423,6 +424,7 @@ static bool touch_lever_mode_select(int touch_x, int touch_y) {
 }
 
 void ui_normal_lever(uint16_t status) {
+  if (antenna_ui_lever(status)) return;
   if (status & EVT_BUTTON_SINGLE_CLICK) {
     ui_mode_menu();
     return;
@@ -475,6 +477,7 @@ static bool touch_apply_ref_scale(int touch_x, int touch_y) {
 }
 
 void ui_normal_touch(int touch_x, int touch_y) {
+  if (antenna_ui_touch(touch_x, touch_y)) return;
   if (touch_pickup_marker(touch_x, touch_y))
     return; // Try drag marker
   if (touch_lever_mode_select(touch_x, touch_y))

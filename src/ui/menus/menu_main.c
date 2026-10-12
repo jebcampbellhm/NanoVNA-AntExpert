@@ -19,6 +19,7 @@
  */
 
 #include "nanovna.h"
+#include "ui/antenna_ui.h"
 #include "ui/menus/menu_main.h"
 #include "ui/menus/menu_cal.h"
 #include "ui/menus/menu_stimulus.h"
@@ -43,6 +44,9 @@ static UI_FUNCTION_ADV_CALLBACK(menu_pause_acb) {
 
 // Root Menu
 const menuitem_t menu_top[] = {
+#ifdef NANOVNA_F303
+    {MT_CALLBACK, 0, "ANTENNA", antenna_ui_enter},
+#endif
     {MT_SUBMENU, 0, "CAL", menu_cal_menu},
     {MT_SUBMENU, 0, "STIMULUS", menu_stimulus},
     {MT_SUBMENU, 0, "DISPLAY", menu_display},

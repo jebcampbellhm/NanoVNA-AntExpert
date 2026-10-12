@@ -28,6 +28,7 @@
 #include "hal.h"
 #include "driver/si5351.h"
 #include "nanovna.h"
+#include "ui/antenna_ui.h"
 #include "sys/shell_service.h"
 #include "sys/shell_commands.h"
 #include "driver/usbcfg.h"
@@ -250,6 +251,7 @@ static void app_measurement_handle_result(measurement_engine_port_t* port,
   if (result == NULL || !result->completed) {
     return;
   }
+  antenna_ui_measurement();
   if ((props_mode & DOMAIN_MODE) == DOMAIN_TIME) {
     app_measurement_transform_domain(result->sweep_mask);
   }
@@ -421,16 +423,18 @@ void sweep_get_ordered(freq_t* start, freq_t* stop) {
 
 static void update_marker_index(freq_t start, freq_t stop, uint16_t points) {
   uint32_t i;
-  freq_t step;
-  if (points > 1)
-    step = (stop - start) / (points - 1);
-  else
-    step = 1;
+  if (points == 0)
+    return;
   for (i = 0; i < MARKERS_MAX; i++) {
     if (markers[i].enabled) {
-        int32_t index = (int32_t)(markers[i].frequency - start) / step;
-        if (index < 0) index = 0;
-        if (index >= points) index = points - 1;
+        uint16_t index = 0;
+        // CW maps every marker to its first (identical-frequency) point.
+        // Scale before dividing: tiny spans can have less than 1 Hz per point.
+        if (stop > start && markers[i].frequency > start) {
+          if (markers[i].frequency >= stop) index = points - 1;
+          else index = ((uint64_t)(markers[i].frequency - start) * (points - 1)) /
+                       (stop - start);
+        }
         set_marker_index(i, index);
     }
   }

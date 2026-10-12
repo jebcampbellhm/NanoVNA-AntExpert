@@ -30,6 +30,7 @@
 #include "hal.h"
 #include "chprintf.h"
 #include "nanovna.h"
+#include "ui/antenna_ui.h"
 #include "sys/state_manager.h"
 
 // Icons bitmap resources
@@ -954,6 +955,10 @@ void draw_all(void) {
   if (redraw_request & REDRAW_BACKUP)
     update_backup_data();
 #endif
+  if (redraw_request && antenna_ui_draw()) {
+    redraw_request = 0;
+    return;
+  }
   if (redraw_request & REDRAW_PLOT)
     plot_into_index();
   if (area_width == 0) {

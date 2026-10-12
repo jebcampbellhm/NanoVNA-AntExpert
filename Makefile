@@ -208,6 +208,8 @@ CSRC = $(STARTUPSRC) \
        src/ui/core/ui_menu_engine.c \
        src/ui/core/ui_keypad.c \
        src/ui/menus/menu_main.c \
+       src/ui/antenna_ui.c \
+       src/processing/antenna.c \
        src/ui/menus/menu_cal.c \
        src/ui/menus/menu_display.c \
        src/ui/menus/menu_marker.c \
@@ -369,7 +371,10 @@ TEST_SUITES := $(TEST_BUILD_DIR)/test_common $(TEST_BUILD_DIR)/test_vna_math \
                $(TEST_BUILD_DIR)/test_scheduler $(TEST_BUILD_DIR)/test_measurement_engine \
                $(TEST_BUILD_DIR)/test_shell_service $(TEST_BUILD_DIR)/test_display_presenter \
                $(TEST_BUILD_DIR)/test_accuracy_analysis $(TEST_BUILD_DIR)/test_si5351 \
-               $(TEST_BUILD_DIR)/test_si5351_h4
+               $(TEST_BUILD_DIR)/test_si5351_h4 $(TEST_BUILD_DIR)/test_antenna
+
+$(TEST_BUILD_DIR)/test_antenna: tests/unit/test_antenna.c src/processing/antenna.c | $(TEST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -Iinclude -o $@ $^ $(HOST_LDFLAGS)
 
 $(TEST_BUILD_DIR):
 	@mkdir -p $@
@@ -430,6 +435,8 @@ test: tests
 	done
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_startup_timing.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_sweep_snapshot.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_antenna_ui.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_marker_frequency.py
 
 # Define ChibiOS sources and objects (handle potential ./ prefix)
 CHIBIOS_SOURCES := $(filter third_party/ChibiOS/% ./third_party/ChibiOS/%, $(CSRC))
