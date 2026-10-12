@@ -14,6 +14,9 @@ clamp to the start instead of wrapping to the end.
 ## Use
 
 - **BANDS:** choose HF+6, V/UHF, or FAV. PREV/NEXT page through six large tiles.
+  Each tile shows wavelength and an approximate center frequency rounded to MHz.
+  A single 60 m tile covers all five channels, with numbered center guides on
+  the sweep graph. The sweep also measures the gaps between channels.
 - **FAV + / FAV \*:** toggle and immediately save the current preset as a favorite.
   This uses the existing configuration save operation, which also saves other
   current device configuration settings. A failed save restores the old favorites.
@@ -48,18 +51,23 @@ antenna display; tap SWEEP to reapply the preset.
 ## Preset source and storage
 
 Presets follow the user's `US-BandPlan_3-2024.pdf` (Icom US band-plan chart):
-160 m, 80/75 m, five individual 60 m channel windows, 40 m, 30 m, 20 m, 17 m,
+160 m, 80/75 m, a combined 60 m view, 40 m, 30 m, 20 m, 17 m,
 15 m, 12 m, 10 m, 6 m, 2 m, 1.25 m, 70 cm, 33 cm, and 23 cm. Each 60 m window
 is 2.8 kHz wide, centered at 5.332, 5.348, 5.3585, 5.373, or 5.405 MHz.
-These dated measurement presets are not a current transmission authorization
-or a license-class filter. In particular, 60 m is not treated as one continuous
-band. Upper-frequency presets do not imply uniform measurement accuracy.
+The combined 60 m sweep runs from 5.3306 to 5.4064 MHz, with guides numbered
+1 through 5 at these centers. These dated measurement presets are not a current
+transmission authorization or a license-class filter; the continuous measurement
+span includes gaps between the channel windows. Upper-frequency presets do not
+imply uniform measurement accuracy.
 
-Favorites use the three existing reserved configuration bytes: 20 band bits and
-a four-bit `0xA` format marker. No configuration size or calibration-slot layout
+Favorites use the three existing reserved configuration bytes: 20 legacy band
+bits and a four-bit `0xA` format marker. The 16 visible presets are mapped onto
+those original bit positions. Any saved 60 m channel favorite selects the combined
+60 m entry; saving it sets all five old channel bits, preserving compatibility.
+No configuration size or calibration-slot layout
 changes. Uninitialized/cleared configuration defaults to 40 m, 20 m, 6 m, 2 m,
 and 70 cm; an explicitly empty list stays empty. Antenna Mode itself is not
-automatically entered at boot. Preset order is part of the storage format.
+automatically entered at boot. The legacy bit mapping is part of the storage format.
 
 The H4's CPU-only sweep cache occupies 1,604 bytes of CCM alongside the existing
 measurement buffer. It is written completely before use, does not use DMA, and
@@ -100,7 +108,8 @@ LCD before drawing text and lines. The follow-up renderer composes complete
 without clearing the LCD. It adds eight bytes of static state and no framebuffer
 or heap allocation. Baseline and strip-rendered previews match pixel-for-pixel;
 the UI regression rejects screen clearing and checks repeated-frame transfers.
-Physical confirmation of flicker and responsiveness is still required.
+The user confirmed on hardware that flicker is gone and touch controls remain
+responsive. The subsequent combined-channel/menu changes still need device testing.
 
 Follow-up validation: all 14 C suites and six Python harnesses pass normally and
 with ASan/UBSan; clean WSL H4 and H builds pass with the same toolchain/options.
@@ -109,6 +118,15 @@ data 552, bss 48,452 bytes; heap space is 392 bytes and CCM use remains 8,020
 bytes. H size is unchanged. H4 has no warnings; H retains the existing toolchain
 warnings. The follow-up H4 binary SHA-256 is
 `4b27483aa3bdc9ffc71e746e86faec6085f87b36244bde469325aebb0045be5d`.
+
+Combined 60 m and two-line band-tile validation: all 14 C suites and six Python
+harnesses pass normally and with ASan/UBSan, including all 20 legacy favorite
+bits and the five channel-guide positions. Rendered HF/VHF tiles and the 60 m
+graph were visually checked. Clean WSL H4 and H builds pass; H4 text is 116,104,
+data 552, bss 48,452 bytes (RAM use unchanged), and H size is unchanged.
+H4 remains warning-free; H retains the existing toolchain warnings.
+The combined-channel H4 binary SHA-256 is
+`391f555bb1743ff40e26594ebb793aed3848735bafc2b6a017096bf0b9fd5301`.
 
 Before considering this feature hardware-validated:
 

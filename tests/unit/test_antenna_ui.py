@@ -180,9 +180,9 @@ int main(void) {
   assert(memcmp(previous,pixels,sizeof(pixels))==0);
   uint32_t before=antenna_favorites_decode(config._reserved);
   antenna_ui_touch(280,10); assert(writes==1);
-  assert(antenna_favorites_decode(config._reserved)==(before^(1u<<9)));
+  assert(antenna_favorites_decode(config._reserved)==(before^(1u<<5)));
   fail_save=true; antenna_ui_touch(280,10); assert(messages==1);
-  assert(antenna_favorites_decode(config._reserved)==(before^(1u<<9)));
+  assert(antenna_favorites_decode(config._reserved)==(before^(1u<<5)));
   fail_save=false;
   antenna_ui_touch(260,295);
   assert(frequency0==frequency1 && sweep_points==21);
@@ -214,15 +214,26 @@ int main(void) {
   assert(frequency0==1000000 && frequency1==30000000 && sweep_points==101);
   assert(props_mode==(DOMAIN_MODE|TD_CENTER_SPAN) && current_props._portz==75 && sweep_mode==0);
   assert(updates>600);
+  // One 60 m tile covers all five channels; guides are drawn at their centers.
+  antenna_ui_enter(0); antenna_ui_touch(20,295); antenna_ui_touch(20,50);
+  antenna_ui_touch(20,150);
+  assert(frequency0==5330600 && frequency1==5406400);
+  preview("60m-channels");
+  for(unsigned i=0;i<ANTENNA_60M_CHANNELS;i++) {
+    unsigned x=42+(uint64_t)(antenna_60m_centers[i]-frequency0)*424/(frequency1-frequency0);
+    assert(pixels[190][x]==1 && pixels[191][x]==1 && pixels[192][x]==0);
+  }
+  sample(); preview("60m-sweep");
+  antenna_ui_touch(400,10);
   // Every band at maximum point count, graph ceiling, and large readout.
   sweep_points=401; antenna_ui_enter(0);
-  for(unsigned g=0;g<2;g++) for(unsigned p=0;p<(g?1:3);p++)
+  for(unsigned g=0;g<2;g++) for(unsigned p=0;p<(g?1:2);p++)
     for(unsigned j=0;j<6;j++) {
       if(g && j==5) break;
       antenna_ui_touch(20,295); antenna_ui_touch(g*160+20,50);
       for(unsigned k=0;k<p;k++) antenna_ui_touch(180,295);
       antenna_ui_touch((j%2)*240+20,90+(j/2)*58);
-      if(!g && p==2 && j>=3) { antenna_ui_touch(400,295); continue; }
+      if(!g && p==1 && j>=5) { antenna_ui_touch(400,295); continue; }
       for(unsigned i=0;i<sweep_points;i++) measured[0][i][0]=1;
       antenna_ui_measurement(); assert(antenna_ui_draw());
     }

@@ -9,7 +9,7 @@
 #include <string.h>
 
 static bool active, picker, tuning, valid;
-static unsigned band = 9, group, page;
+static unsigned band = 5, group, page;
 static uint32_t favorites;
 static freq_t tune_frequency, expected_start, expected_stop;
 static freq_t saved_start, saved_stop;
@@ -140,7 +140,12 @@ static void draw_picker(void) {
   for (unsigned j = 0; j < 6 && page*6+j < n; ++j) {
     unsigned i = list[page*6+j];
     plot_printf(s,sizeof(s),"%s%s",antenna_bands[i].name,(favorites & (1u<<i)) ? " *" : "");
-    button(s,(j%2)*240,88+(j/2)*58,240,54);
+    int x = (j%2)*240, y = 88+(j/2)*58;
+    button("",x,y,240,54);
+    label(s,x+8,y+3,2);
+    uint32_t mhz = ((uint64_t)antenna_bands[i].start+antenna_bands[i].stop+1000000)/2000000;
+    plot_printf(s,sizeof(s),"~%u MHz",mhz);
+    label(s,x+8,y+28,2);
   }
   button("PREV",0,276,120,44); button("NEXT",120,276,120,44);
   plot_printf(s,sizeof(s),"%u/%u",page+1,n ? (n+5)/6 : 1);
@@ -188,6 +193,15 @@ static void draw_strip(void) {
   } else {
     line(42,165,42,245); line(42,245,466,245);
     line(42,225,466,225); label("2:1",4,220,1); label("5",18,164,1);
+    if (band == ANTENNA_60M_BAND) {
+      for (unsigned i = 0; i < ANTENNA_60M_CHANNELS; ++i) {
+        int x = 42 + (uint64_t)(antenna_60m_centers[i]-expected_start)*424 /
+                     (expected_stop-expected_start);
+        char channel[] = {(char)('1'+i), '\0'};
+        label(channel,x-6,165,2);
+        for (int y = 190; y < 245; y += 5) line(x,y,x,y+1);
+      }
+    }
     ink = GET_PALTETTE_COLOR(LCD_TRACE_1_COLOR);
     if (ready && count > 1)
       for (unsigned i = 1; i < count; ++i)

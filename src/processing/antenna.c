@@ -2,13 +2,14 @@
 #include <math.h>
 #include <string.h>
 
-/* US-BandPlan_3-2024.pdf. 60 m entries are individual channel windows,
- * not a continuous allocation. These are measurement presets. */
+/* US-BandPlan_3-2024.pdf. The 60 m measurement span includes gaps between
+ * the five channel windows; markers identify their centers. */
+const uint32_t antenna_60m_centers[ANTENNA_60M_CHANNELS] = {
+  5332000, 5348000, 5358500, 5373000, 5405000
+};
 const antenna_band_t antenna_bands[ANTENNA_BAND_COUNT] = {
   {"160m",1800000,2000000}, {"80/75m",3500000,4000000},
-  {"60m CH1",5330600,5333400}, {"60m CH2",5346600,5349400},
-  {"60m CH3",5357100,5359900}, {"60m CH4",5371600,5374400},
-  {"60m CH5",5403600,5406400}, {"40m",7000000,7300000},
+  {"60m",5330600,5406400}, {"40m",7000000,7300000},
   {"30m",10100000,10150000}, {"20m",14000000,14350000},
   {"17m",18068000,18168000}, {"15m",21000000,21450000},
   {"12m",24890000,24990000}, {"10m",28000000,29700000},
@@ -53,9 +54,13 @@ antenna_result_t antenna_analyze(const float *swr, unsigned count) {
   return r;
 }
 uint32_t antenna_favorites_decode(const uint8_t bytes[3]) {
-  if ((bytes[2] & 0xf0) != 0xa0) return (1u<<7) | (1u<<9) | (1u<<14) | (1u<<15) | (1u<<17);
-  return bytes[0] | ((uint32_t)bytes[1]<<8) | ((uint32_t)(bytes[2]&15)<<16);
+  if ((bytes[2] & 0xf0) != 0xa0) return (1u<<3) | (1u<<5) | (1u<<10) | (1u<<11) | (1u<<13);
+  uint32_t stored = bytes[0] | ((uint32_t)bytes[1]<<8) | ((uint32_t)(bytes[2]&15)<<16);
+  // Keep the original on-flash bit positions. Any old 60 m favorite selects
+  // the combined entry; all bands above it retain their original identity.
+  return (stored & 3u) | ((stored & 0x7cu) ? 4u : 0u) | ((stored >> 4) & 0xfff8u);
 }
 void antenna_favorites_encode(uint8_t bytes[3], uint32_t mask) {
-  bytes[0] = mask; bytes[1] = mask >> 8; bytes[2] = 0xa0 | ((mask>>16)&15);
+  uint32_t stored = (mask & 3u) | ((mask & 4u) ? 0x7cu : 0u) | ((mask & 0xfff8u) << 4);
+  bytes[0] = stored; bytes[1] = stored >> 8; bytes[2] = 0xa0 | ((stored>>16)&15);
 }

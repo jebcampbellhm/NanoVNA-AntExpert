@@ -3,8 +3,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define ANTENNA_BAND_COUNT 20
-#define ANTENNA_HF_COUNT 15
+#define ANTENNA_BAND_COUNT 16
+#define ANTENNA_HF_COUNT 11
+#define ANTENNA_60M_BAND 2
+#define ANTENNA_60M_CHANNELS 5
+extern const uint32_t antenna_60m_centers[ANTENNA_60M_CHANNELS];
 typedef struct { const char *name; uint32_t start, stop; } antenna_band_t;
 extern const antenna_band_t antenna_bands[ANTENNA_BAND_COUNT];
 /* Negative means invalid; 999 means an open/short or SWR beyond the display. */

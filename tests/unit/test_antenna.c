@@ -49,7 +49,22 @@ int main(void) {
   antenna_favorites_encode(bytes,0);
   assert(antenna_favorites_decode(bytes) == 0); // Empty is distinct from uninitialized.
   antenna_favorites_encode(bytes,0xffffffff);
-  assert(antenna_favorites_decode(bytes) == 0xfffff);
+  assert(antenna_favorites_decode(bytes) == 0xffff);
+  // Every legacy favorite bit keeps its band identity after collapsing 60 m.
+  for (unsigned i=0; i<20; ++i) {
+    uint32_t old = 1u<<i;
+    bytes[0]=old; bytes[1]=old>>8; bytes[2]=0xa0|((old>>16)&15);
+    unsigned index = i<2 ? i : (i<7 ? 2 : i-4);
+    assert(antenna_favorites_decode(bytes)==(1u<<index));
+  }
+  antenna_favorites_encode(bytes,1u<<ANTENNA_60M_BAND);
+  assert(bytes[0]==0x7c && bytes[1]==0 && bytes[2]==0xa0);
+  assert(antenna_bands[2].start==5330600 && antenna_bands[2].stop==5406400);
+  for(unsigned i=0;i<ANTENNA_60M_CHANNELS;i++) {
+    assert(antenna_60m_centers[i]>antenna_bands[2].start);
+    assert(antenna_60m_centers[i]<antenna_bands[2].stop);
+    if(i) assert(antenna_60m_centers[i]>antenna_60m_centers[i-1]);
+  }
   puts("antenna tests passed");
   return 0;
 }
