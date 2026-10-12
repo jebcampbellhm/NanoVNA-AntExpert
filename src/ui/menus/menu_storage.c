@@ -95,7 +95,8 @@ static FILE_LOAD_CALLBACK(load_snp_data) {
   char* line = buf_8 + buffer_size;
   uint16_t j = 0, i, count = 0;
   freq_t start = 0, stop = 0, freq;
-  while (f_read(f, buf_8, buffer_size, &size) == FR_OK && size > 0) {
+  FRESULT status;
+  while ((status = f_read(f, buf_8, buffer_size, &size)) == FR_OK && size > 0) {
     for (i = 0; i < size; i++) {
       uint8_t c = buf_8[i];
       if (c == '\r') {
@@ -127,6 +128,9 @@ static FILE_LOAD_CALLBACK(load_snp_data) {
         line[j++] = (char)c;
     }
   }
+  // A read failure after valid rows is not a successful (shorter) sweep.
+  if (status != FR_OK)
+    return "Read error";
   if (count != 0) {
     pause_sweep();
     current_props._electrical_delay[0] = 0.0f;

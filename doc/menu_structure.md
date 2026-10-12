@@ -70,6 +70,7 @@ For detailed 12-point calibration instructions, see the documentation:
   - DFU `[__DFU_SOFTWARE_MODE__]`
   - MORE
     - MODE (Direct: Si5351 / Div: MS5351 / Multi: SWC5351 / ZeeTK: NE602A + SJWCH5351)
+    - SAVE MODE (save device configuration, including the selected RF profile)
     - SEPARATOR `[__DIGIT_SEPARATOR__]`
     - USB DEVICE UID `[__USB_UID__]`
     - CLEAR CONFIG -> CLEAR ALL AND RESET

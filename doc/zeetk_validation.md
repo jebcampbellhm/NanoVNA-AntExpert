@@ -57,7 +57,7 @@ The synthesizer test also starts with a saved ZeeTK profile. Startup ordering
 is checked separately; these tests do not emulate analog settling or the full
 STM32 ADC peripheral.
 
-## Bench validation still required
+## Comparative-audit corrections
 
 The comparative-audit fixes also keep cached RF frequencies in requested Hz,
 bound harmonic lookup to the selected table (the last band covers requests
@@ -73,7 +73,21 @@ not published. If no complete sweep is available within the acquisition timeout,
 `data` reports `No complete sweep available` rather than retrying indefinitely.
 Explicit successful `scan` commands also publish their completed measurements.
 SD imports use the same writer protection and publish only successful loads.
+An SD read error, even after valid rows, leaves the snapshot invalid and does
+not adopt the partial file's sweep range or point count.
 Only the shell is a snapshot consumer; this is not a multi-reader queue.
+
+## Hardware validation
+
+On 2026-10-12, the tester reported that hardware tests on the ZeeTK branch
+look good. The board was identified as NanoVNA-H4 rev4.4 / ZeeTK, originally
+running vendor firmware 1.2.50. Earlier testing explicitly confirmed that
+selecting ZeeTK, using Save Mode, and restarting retained the selection,
+including after Clear Config. NanoVNA-Saver connectivity was also reported.
+
+This is user-reported bench validation, not a recorded RF accuracy data set.
+No physical NanoVNA-H rev3.7 test or exhaustive frequency-range/timing capture
+is claimed. Retain the following checklist for reviewers and other boards.
 
 On hardware, also test repeated `data` commands during continuous sweeps,
 paused/partial sweeps, time-domain display, and a slow or disconnected USB host.
