@@ -30,6 +30,12 @@ The synthesizer test decodes actual I2C register writes to check RF and audio
 frequencies, drive currents and ADC gain around band boundaries. It also
 switches from a longer legacy table at 2.7 GHz to catch stale cached indices.
 
+Normal host tests and the H/H4 RF tests with ASan/UBSan pass independently.
+Clean F303 and F072 (USE_LTO=yes) builds pass in WSL with Arm GCC 14.2.1.
+The full sanitizer suite on this RF-only branch still detects the upstream
+negative-exponent signed shift in `vna_sqrtf`; the separate runtime reliability
+PR fixes it, and the combined firmware passes the full sanitizer suite.
+
 ## RF correctness and user workflow
 
 The frequency cache stores requested Hz, including at low frequencies where
