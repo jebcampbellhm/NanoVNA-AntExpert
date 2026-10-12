@@ -26,6 +26,9 @@ functions without requiring any STM32 hardware.
     controlled interleavings, partial sweeps, reader handoff and timer rollover
   - `test_snp_import.py`: runs the production SD loader with injected read errors;
     incomplete files must not publish snapshots or replace sweep settings
+  - `test_usb_control.py`: exercises the production CDC control hook; opening,
+    closing, repeated DTR requests, and RTS changes must preserve transfer queues
+    and hold the ISR lock when waking RTOS waiters
 - `tests/stubs/` provides lightweight stand-ins for headers that normally come
   from ChibiOS/HAL so that host builds can compile firmware files.
 
@@ -36,7 +39,7 @@ make test
 ```
 
 The `test` target builds and executes the C suites, then runs the startup/timing,
-snapshot, and SD-import harnesses using Python 3 and the host C compiler.
+snapshot, SD-import, and USB-control harnesses using Python 3 and the host C compiler.
 Override `HOST_PYTHON` or `HOST_CC` if needed. Failures are reported with
 descriptive messages.
 

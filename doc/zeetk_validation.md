@@ -79,6 +79,21 @@ Only the shell is a snapshot consumer; this is not a multi-reader queue.
 
 ## Hardware validation
 
+Final USB testing on 2026-10-12 found a shell stall: a version query and a
+401-point CH0 read succeeded, then CH1 and subsequent queries stopped responding
+while the display remained responsive. Reconnecting USB and a reported fresh
+restart did not recover the subsequent version query. This blocks final USB
+sign-off; the earlier bench report below does not cover this failure.
+
+Inspection found that the CDC DTR callback reset RX/TX queues without stopping
+active USB transfers and invoked an RTOS I-class wake operation without an ISR
+lock. The targeted correction leaves queue initialization/disconnection to the
+USB bus-event callbacks and changes only the session flag on DTR, with the
+required ISR lock around the wake operation. A host regression test covers
+open/close/reopen, repeated DTR requests, and RTS-only changes. This is a
+candidate fix; repeat CH0/CH1 reads and NanoVNA-Saver tests on hardware before
+claiming the observed stall is resolved.
+
 On 2026-10-12, the tester reported that hardware tests on the ZeeTK branch
 look good. The board was identified as NanoVNA-H4 rev4.4 / ZeeTK, originally
 running vendor firmware 1.2.50. Earlier testing explicitly confirmed that
