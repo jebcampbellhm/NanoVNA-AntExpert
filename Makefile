@@ -358,6 +358,7 @@ ULIBS = -lm
 
 # Host-side unit tests  
 HOST_CC ?= gcc
+HOST_PYTHON ?= python3
 HOST_CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -O2 -fno-inline-small-functions -ggdb -fomit-frame-pointer -falign-functions=16 -ffast-math -fsingle-precision-constant -fmerge-constants
 HOST_LDFLAGS ?= -lm
 
@@ -367,7 +368,8 @@ TEST_SUITES := $(TEST_BUILD_DIR)/test_common $(TEST_BUILD_DIR)/test_vna_math \
                $(TEST_BUILD_DIR)/test_legacy_measure $(TEST_BUILD_DIR)/test_event_bus \
                $(TEST_BUILD_DIR)/test_scheduler $(TEST_BUILD_DIR)/test_measurement_engine \
                $(TEST_BUILD_DIR)/test_shell_service $(TEST_BUILD_DIR)/test_display_presenter \
-               $(TEST_BUILD_DIR)/test_accuracy_analysis
+               $(TEST_BUILD_DIR)/test_accuracy_analysis $(TEST_BUILD_DIR)/test_si5351 \
+               $(TEST_BUILD_DIR)/test_si5351_h4
 
 $(TEST_BUILD_DIR):
 	@mkdir -p $@
@@ -409,7 +411,15 @@ $(TEST_BUILD_DIR)/test_display_presenter: tests/unit/test_display_presenter.c \
 $(TEST_BUILD_DIR)/test_accuracy_analysis: tests/unit/test_accuracy_analysis.c src/processing/vna_math.c | $(TEST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -DNANOVNA_HOST_TEST -Itests/stubs -Iinclude -Isrc -o $@ $^ $(HOST_LDFLAGS)
 
+$(TEST_BUILD_DIR)/test_si5351: tests/unit/test_si5351.c src/driver/si5351.c \
+        include/driver/si5351.h tests/stubs/si5351/nanovna.h | $(TEST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -Itests/stubs/si5351 -Itests/stubs -Iinclude -Isrc -o $@ $(filter %.c,$^) $(HOST_LDFLAGS)
+
 .PHONY: test tests
+$(TEST_BUILD_DIR)/test_si5351_h4: tests/unit/test_si5351.c src/driver/si5351.c \
+        include/driver/si5351.h tests/stubs/si5351/nanovna.h | $(TEST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -DNANOVNA_F303 -Itests/stubs/si5351 -Itests/stubs -Iinclude -Isrc -o $@ $(filter %.c,$^) $(HOST_LDFLAGS)
+
 tests: $(TEST_SUITES)
 
 test: tests
@@ -461,3 +471,8 @@ else
 	@etags *.[ch] boards/STM32F072/*.[ch] $(shell find third_party/ChibiOS -name \*.\[ch\] -print)
 endif
 	@ls -l TAGS
+
+.PHONY: test_rf_startup
+test: test_rf_startup
+test_rf_startup:
+	$(HOST_PYTHON) tests/unit/test_rf_startup.py

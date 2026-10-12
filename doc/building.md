@@ -75,6 +75,13 @@ the `TARGET` environment variable before invoking `make`:
 
 If you omit `TARGET`, the build defaults to `F072`.
 
+The same image supports the different RF hardware revisions. For NanoVNA-H
+rev3.7 or NanoVNA-H4 rev4.4 with ZeeTK NE602A mixers and an SJWCH5351 clock
+(ZK label), choose `System -> Device -> More -> Mode -> ZeeTK` after flashing,
+then `SAVE MODE` immediately below `MODE` and recalibrate with `CAL POWER` set
+to `AUTO`. The default remains the original Si5351 profile; existing saved modes
+are not changed.
+
 ## 4. Build the firmware
 
 Use the standard GNU Make workflow:
@@ -86,6 +93,10 @@ make -j$(nproc)
 ```
 
 On macOS use `make -j$(sysctl -n hw.ncpu)` for the parallel build step.
+
+With GNU Arm GCC 14.2.1, use `make TARGET=F072 USE_LTO=yes -j$(nproc)` for the
+smaller NanoVNA-H: the non-LTO image exceeds its firmware flash allocation.
+NanoVNA-H4 (`TARGET=F303`) builds with the default options.
 
 The build artefacts are written to `build/`:
 

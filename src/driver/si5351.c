@@ -462,6 +462,7 @@ static const band_strategy_t* band_s;
 /*
  * Frequency generation divide on band
  */
+static uint16_t band_count;
 // Mode for H board v3.3 and SI5351 installed
 CONST_BAND band_strategy_t band_strategy_33H_SI5351[] = {
     {0U, 0, {0}, 0, 0, -1, -1, -1, -1, 1}, // 0
@@ -984,21 +985,63 @@ CONST_BAND band_strategy_t band_strategy_SWC5351[] = {
      11 * 12 * 4} // 9
 };
 
+// NanoVNA-H v3.7 / H4 v4.4: ZeeTK NE602A mixers and SJWCH5351 generator.
+// RF settings from hugen79/NanoVNA-H 1.2.50 (816495e), updated in 1.2.44.
+// Keep the older SWC5351 profile: the mixer, not just the clock, determines gain.
+CONST_BAND band_strategy_t band_strategy_ZEETK[] = {
+    {0U, 0, {0}, 0, 0, -1, -1, -1, -1, 1},
+    {32000U, SI5351_FIXED_PLL, {6}, 1, 1,
+     SI5351_CLK_DRIVE_STRENGTH_6MA, SI5351_CLK_DRIVE_STRENGTH_4MA, 0, 0, 1},
+    {130000000U, SI5351_FIXED_PLL, {40}, 1, 1,
+     SI5351_CLK_DRIVE_STRENGTH_6MA, SI5351_CLK_DRIVE_STRENGTH_4MA, 0, 0, 1},
+    {1, SI5351_FIXED_MULT, {4}, 1, 1,
+     SI5351_CLK_DRIVE_STRENGTH_6MA, SI5351_CLK_DRIVE_STRENGTH_4MA, 0, 0, 1},
+    {588000000U, SI5351_FIXED_MULT, {6}, 3, 5,
+     SI5351_CLK_DRIVE_STRENGTH_6MA, SI5351_CLK_DRIVE_STRENGTH_6MA, 5, 5, 3 * 5 * 4},
+    {3, SI5351_FIXED_MULT, {4}, 3, 5,
+     SI5351_CLK_DRIVE_STRENGTH_6MA, SI5351_CLK_DRIVE_STRENGTH_6MA, 5, 5, 3 * 5 * 4},
+    {5, SI5351_FIXED_MULT, {4}, 5, 7,
+     SI5351_CLK_DRIVE_STRENGTH_6MA, SI5351_CLK_DRIVE_STRENGTH_6MA, 5, 5, 5 * 7 * 4},
+    {7, SI5351_FIXED_MULT, {4}, 7, 9,
+     SI5351_CLK_DRIVE_STRENGTH_8MA, SI5351_CLK_DRIVE_STRENGTH_8MA, 40, 40, 7 * 9 * 4},
+    {9, SI5351_FIXED_MULT, {4}, 9, 11,
+     SI5351_CLK_DRIVE_STRENGTH_8MA, SI5351_CLK_DRIVE_STRENGTH_8MA, 50, 50, 9 * 11 * 4},
+    {11, SI5351_FIXED_MULT, {4}, 11, 13,
+     SI5351_CLK_DRIVE_STRENGTH_8MA, SI5351_CLK_DRIVE_STRENGTH_8MA, 55, 55, 11 * 12 * 4}
+};
+
 void si5351_set_band_mode(uint16_t t) {
   static const band_strategy_t* bs[] = {
 #if defined(NANOVNA_F303)
-      band_strategy_H4_SI5351, band_strategy_36H_MS5351, band_strategy_SWC5351
+      band_strategy_H4_SI5351, band_strategy_36H_MS5351, band_strategy_SWC5351,
 #else
-      band_strategy_33H_SI5351, band_strategy_36H_MS5351, band_strategy_SWC5351
+      band_strategy_33H_SI5351, band_strategy_36H_MS5351, band_strategy_SWC5351,
 #endif
+      band_strategy_ZEETK
   };
+  static const uint16_t counts[] = {
+#if defined(NANOVNA_F303)
+      ARRAY_COUNT(band_strategy_H4_SI5351),
+#else
+      ARRAY_COUNT(band_strategy_33H_SI5351),
+#endif
+      ARRAY_COUNT(band_strategy_36H_MS5351), ARRAY_COUNT(band_strategy_SWC5351),
+      ARRAY_COUNT(band_strategy_ZEETK)
+  };
+  t = t < ARRAY_COUNT(bs) ? t : SI5351_BAND_SI5351;
   band_s = bs[t];
+  band_count = counts[t];
+  // A profile switch must reprogram PLLs and codec gain even at the same frequency.
+  // The cached band index also belongs to the old (possibly longer) table.
+  si5351_reset_cache();
 }
 
 uint32_t si5351_get_harmonic_lvl(uint32_t freq) {
   uint16_t i;
   const uint32_t threshold = clamp_harmonic_threshold(config._harmonic_freq_threshold);
-  for (i = 0;; i++) {
+  // The last band covers frequencies above its nominal threshold as well.
+  // A user-adjustable threshold must never let the lookup leave the table.
+  for (i = 0; i + 1U < band_count; i++) {
     uint32_t f = band_s[i].freq;
     if (f < 20) {
       uint64_t scaled = (uint64_t)f * threshold;
@@ -1022,6 +1065,7 @@ uint32_t si5351_get_harmonic_lvl(uint32_t freq) {
 #define AUDIO_CODEC_CHANNEL 2
 
 int si5351_set_frequency(uint32_t freq, uint8_t drive_strength) {
+  const uint32_t requested_freq = freq;
   uint8_t band;
   int delay = 0;
   if (freq == 0)
@@ -1059,7 +1103,7 @@ int si5351_set_frequency(uint32_t freq, uint8_t drive_strength) {
     current_power = drive_strength;
   }
 
-  if (freq == current_freq)
+  if (requested_freq == current_freq && band == current_band)
     return DELAY_CHANNEL_CHANGE;
 
   if (current_band != band) {
@@ -1142,8 +1186,8 @@ int si5351_set_frequency(uint32_t freq, uint8_t drive_strength) {
                           omul); // set PLLA freq = (ofreq/omul)*fdiv
     si5351_setup_pll_freq(SI5351_REG_PLL_B, (uint64_t)freq * fdiv,
                           mul); // set PLLB freq = ( freq/ mul)*fdiv
-    // Setup CH0 and CH1 constant fdiv divider at change
-    if (band_s[current_band].div != band_s[band].div) {
+    // A new band can change drive strength even when its divider is unchanged.
+    if (current_band != band) {
       si5351_setupMultisynth(OFREQ_CHANNEL, fdiv, 0, 1, SI5351_R_DIV_1,
                              ods | SI5351_CLK_PLL_SELECT_A);
       si5351_setupMultisynth(FREQ_CHANNEL, fdiv, 0, 1, SI5351_R_DIV_1,
@@ -1168,6 +1212,6 @@ int si5351_set_frequency(uint32_t freq, uint8_t drive_strength) {
     current_band = band;
     delay = DELAY_BANDCHANGE;
   }
-  current_freq = freq;
+  current_freq = requested_freq;
   return delay;
 }

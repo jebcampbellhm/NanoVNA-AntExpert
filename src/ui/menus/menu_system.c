@@ -330,11 +330,11 @@ static UI_FUNCTION_ADV_CALLBACK(menu_brightness_acb) {
 #endif
 
 // Band Mode Logic
-// Band Mode Logic
 static const option_desc_t band_mode_options[] = {
-    {0, "Direct", BUTTON_ICON_NONE},
-    {1, "Div", BUTTON_ICON_NONE},
-    {2, "Multi", BUTTON_ICON_NONE},
+    {SI5351_BAND_SI5351, "Direct", BUTTON_ICON_NONE},
+    {SI5351_BAND_MS5351, "Div", BUTTON_ICON_NONE},
+    {SI5351_BAND_SWC5351, "Multi", BUTTON_ICON_NONE},
+    {SI5351_BAND_ZEETK, "ZeeTK", BUTTON_ICON_NONE},
 };
 
 
@@ -349,6 +349,15 @@ static UI_FUNCTION_ADV_CALLBACK(menu_band_sel_acb) {
   config._band_mode = (uint8_t)mode;
   si5351_set_band_mode(config._band_mode);
   config_service_notify_configuration_changed();
+}
+
+static UI_FUNCTION_CALLBACK(menu_save_mode_cb) {
+  (void)data;
+  if (config_save() != 0)
+    ui_message_box("Save Mode", "Save failed", 1500);
+  else
+    ui_message_box("Save Mode", "Mode saved", 1000);
+  request_to_redraw(REDRAW_ALL);
 }
 
 // RTC Logic
@@ -405,6 +414,7 @@ const menuitem_t menu_offset[] = {
 
 const menuitem_t menu_device1[] = {
     {MT_ADV_CALLBACK, 0, "MODE\n " R_LINK_COLOR "%s", menu_band_sel_acb},
+    {MT_CALLBACK, 0, "SAVE MODE", menu_save_mode_cb},
 #ifdef __DIGIT_SEPARATOR__
     {MT_ADV_CALLBACK, VNA_MODE_SEPARATOR, "SEPARATOR\n " R_LINK_COLOR "%s", menu_vna_mode_acb},
 #endif

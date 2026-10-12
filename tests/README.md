@@ -34,3 +34,11 @@ Failures are reported with descriptive messages.
 2. Reuse existing stubs or add new ones (e.g. mock `ch.h`) under `tests/stubs/`.
 3. Keep test comments verbose—CI logs must tell a future maintainer what a
    regression means without opening the sources.
+
+## ZeeTK RF coverage
+
+`make test` also runs the production Si5351 driver against a fake I2C register
+bank for both H and H4. It checks ZeeTK frequency generation, codec clock/gain,
+drive settings, low-frequency cache collisions, threshold limits, and profile
+switching. A Python 3 startup check verifies that saved configuration is loaded
+before generator initialization. Override HOST_PYTHON if needed.
