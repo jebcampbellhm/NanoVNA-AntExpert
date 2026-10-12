@@ -32,7 +32,7 @@ static uint16_t read_buttons(void) {
 }
 
 void ui_input_reset_state(void) {
-  last_button = read_buttons();
+  last_button = ui_input_get_buttons();
   last_button_down_ticks = chVTGetSystemTimeX();
   last_button_repeat_ticks = last_button_down_ticks;
 }
@@ -62,6 +62,7 @@ uint16_t ui_input_check(void) {
   uint16_t cur_button = ui_input_get_buttons();
   uint16_t button_set = (last_button ^ cur_button) & cur_button;
   last_button_down_ticks = ticks;
+  last_button_repeat_ticks = ticks;
   last_button = cur_button;
 
   if (button_set & BUTTON_PUSH) {
@@ -79,23 +80,25 @@ uint16_t ui_input_check(void) {
 uint16_t ui_input_wait_release(void) {
   while (true) {
     wdgReset(&WDGD1);
+    chThdSleepMilliseconds(10);
     systime_t ticks = chVTGetSystemTimeX();
     systime_t dt = ticks - last_button_down_ticks;
-    chThdSleepMilliseconds(10);
     uint16_t cur_button = ui_input_get_buttons();
     uint16_t changed = last_button ^ cur_button;
-    if (dt >= BUTTON_DOWN_LONG_TICKS && (cur_button & BUTTON_PUSH)) {
-      return EVT_BUTTON_DOWN_LONG;
-    }
-    if (changed & BUTTON_PUSH) {
-      return EVT_BUTTON_SINGLE_CLICK;
-    }
     if (changed) {
       last_button = cur_button;
       last_button_down_ticks = ticks;
+      last_button_repeat_ticks = ticks;
+      // A release ends this gesture; it is not another push click.
       return NO_EVENT;
     }
-    if (dt > BUTTON_DOWN_LONG_TICKS && ticks > last_button_repeat_ticks) {
+    if (cur_button == 0)
+      return NO_EVENT;
+    if (dt >= BUTTON_DOWN_LONG_TICKS && (cur_button & BUTTON_PUSH)) {
+      return EVT_BUTTON_DOWN_LONG;
+    }
+    if (dt > BUTTON_DOWN_LONG_TICKS &&
+        (systime_t)(ticks - last_button_repeat_ticks) >= BUTTON_REPEAT_TICKS) {
       uint16_t status = NO_EVENT;
       if (cur_button & BUTTON_DOWN) {
         status |= EVT_DOWN | EVT_REPEAT;
@@ -103,7 +106,7 @@ uint16_t ui_input_wait_release(void) {
       if (cur_button & BUTTON_UP) {
         status |= EVT_UP | EVT_REPEAT;
       }
-      last_button_repeat_ticks = ticks + BUTTON_REPEAT_TICKS;
+      last_button_repeat_ticks = ticks;
       return status;
     }
   }

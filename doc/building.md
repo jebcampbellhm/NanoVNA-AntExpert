@@ -96,7 +96,11 @@ On macOS use `make -j$(sysctl -n hw.ncpu)` for the parallel build step.
 
 With GNU Arm GCC 14.2.1, use `make TARGET=F072 USE_LTO=yes -j$(nproc)` for the
 smaller NanoVNA-H: the non-LTO image exceeds its firmware flash allocation.
-NanoVNA-H4 (`TARGET=F303`) builds with the default options.
+NanoVNA-H4 (`TARGET=F303`) enables LTO by default to fit below the first
+calibration slot at `0x0801C800`. Its firmware allocation is 114 KiB; the
+linker rejects larger images rather than allowing firmware to overlap saved
+calibration. Changing this boundary requires a storage migration, not just
+enlarging the linker region.
 
 The build artefacts are written to `build/`:
 

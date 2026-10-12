@@ -186,3 +186,72 @@ roller-direction checks remain pending.
 
 Multiband overview tiles and noncontiguous band-only scanning remain follow-up
 work; this first version performs one uniform sweep within the selected preset.
+
+### Calibration storage correction and roller input (2026-10-12)
+
+Earlier H4 size checks used the incorrect 142 KiB linker allocation. Existing
+calibration storage actually starts at `0x0801C800`, only 114 KiB from the firmware
+base. The 117,648-byte controls build overlapped slot 0 by 912 bytes. Flashing that
+image could invalidate slot 0; subsequently saving slot 0 could overwrite code.
+The device readback before this correction matched that firmware exactly, so
+code corruption was not observed on this device. Other saved slots are not moved.
+
+The linker now enforces the 114 KiB boundary, H4 enables LTO by default, and
+compile-time structure-size assertions plus a cross-target layout regression
+guard against overlaps. The corrected H4 image is 112,908 bytes, with 3,828 bytes
+remaining before calibration storage. Existing slot-0 calibration may need to
+be replaced by a fresh calibration; the update does not erase saved slots.
+
+Both roller edges now request input processing, so releases are recorded even
+when a screen does not wait for release. Release waits no longer generate a
+second push click, held-direction repeat handles clock wrap, and either direction
+can select an initially unselected menu without a negative bit shift. Host tests
+exercise those production input/navigation paths. Antenna hints now show a roller
+icon with BAND FAV or FREQ +/- instead of the fixed 50-ohm label.
+
+All 14 C suites and eight Python checks pass in WSL, including the normal and
+ASan/UBSan runs. Clean H4 and H (LTO) builds pass. H4 text/data/bss are
+112,356/552/48,432 bytes; H values are 97,928/328/15,104 bytes. The existing
+CMSIS stack-pointer clobber warnings remain under LTO. H4 binary SHA-256:
+`837f419236c8f4247fa38e38fa8db6d3838b500926c84dd57214a11121efe1ef`.
+STM32CubeProgrammer verified the download and started it on device 205431682033.
+A readback confirmed all bytes from `0x0801C800` through the end of flash were
+unchanged by the update. On-device roller and calibration retesting is pending.
+
+### Guided antenna calibration design (not implemented)
+
+H4 has seven 16 KiB internal slots. Each current `properties_t` record is 16,244
+bytes, including five complex correction arrays at 401 points. A 101-point save
+uses the same record size. The existing SD `.cal` file is the same raw structure:
+it supports one uniform range and at most 401 points total. Collection resets when
+the range or point count changes; interpolation assumes that uniform grid.
+
+For antenna reflection measurements, only the three complex S11 correction terms
+are needed: 24 bytes per point. Across the sixteen presets, this is 38,784 bytes
+at 101 points per band or 153,984 bytes at 401, before headers and checksums. One
+existing internal slot cannot hold either. The current map also leaves 28 KiB
+above the configuration region unused; combining that with a reserved slot could
+fit the 101-point payload, but requires a new storage format and careful update
+recovery across the intervening configuration page. It cannot fit the 401-point
+payload. Do not move or repurpose existing slots without a migration plan.
+
+Recommended first implementation: one versioned SD antenna-calibration container
+with a band directory, point counts, frequency limits, RF profile, calibration
+settings, correction data and checksums. Load one band's coefficients into the
+existing RAM buffer. A logical ANT entry can select this container; reserving the
+last internal slot as a cache is optional and must not silently replace user data.
+Use a distinct format identifier/extension rather than treating it as a legacy
+raw `.cal` file.
+
+The wizard should select bands and 101/401 points, then prompt OPEN, SHORT and
+LOAD once each, sweeping all selected bands at each step. Stage raw measurements
+on SD, derive corrections, validate the complete container, and commit only on
+Finish. Cancellation or incomplete files must not replace the prior calibration.
+Existing flash writes lack readback verification, and SD calibration imports need
+complete-read/checksum/range validation before publishing data to live state;
+address these before adding the new save workflow.
+
+For a future multiband display, interpolate within each calibrated segment and
+switch segments for each band. Do not assume interpolation across unmeasured gaps
+or harmonic transitions is accurate. Validate with known loads, cable lengths and
+comparison sweeps on hardware. No calibration accuracy is established by host tests.

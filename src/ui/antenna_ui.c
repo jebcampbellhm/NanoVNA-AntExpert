@@ -192,7 +192,14 @@ static void draw_strip(void) {
                          (CALSTAT_ED|CALSTAT_ES|CALSTAT_ER)) cal = "CAL: INCOMPLETE S11";
     else cal = (cal_status & CALSTAT_INTERPOLATED) ? "CAL: INTERPOLATED" : "CAL: APPLIED";
   }
-  label(cal,12,42,1); label("50 ohm",386,42,1);
+  label(cal,12,42,1);
+  // Small grooved roller and its current left/right function.
+  line(338,46,341,43); line(338,46,341,49);
+  line(344,40,354,40); line(344,52,354,52);
+  line(344,40,344,52); line(354,40,354,52);
+  line(347,42,347,50); line(351,42,351,50);
+  line(360,46,357,43); line(360,46,357,49);
+  label(tuning ? "FREQ +/-" : "BAND FAV",366,42,1);
   label(tuning ? "LIVE SWR" : "MIN SWR",12,64,2);
   bool ready = valid && range_matches();
   if (!ready) label("--",12,90,5);

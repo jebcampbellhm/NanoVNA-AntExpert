@@ -52,7 +52,11 @@ endif
 
 # Enable this if you want link time optimizations (LTO)
 ifeq ($(USE_LTO),)
+ ifeq ($(TARGET),F303)
+  USE_LTO = yes
+ else
   USE_LTO = no
+ endif
 endif
 
 # If enabled, this option allows to compile the application in THUMB mode.
@@ -439,6 +443,8 @@ test: tests
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_marker_frequency.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_snp_import.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_usb_control.py
+	$(HOST_PYTHON) tests/unit/test_flash_layout.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_roller_input.py
 
 # Define ChibiOS sources and objects (handle potential ./ prefix)
 CHIBIOS_SOURCES := $(filter third_party/ChibiOS/% ./third_party/ChibiOS/%, $(CSRC))

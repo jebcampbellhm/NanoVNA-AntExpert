@@ -28,6 +28,9 @@
 #include <stdbool.h>
 #include <string.h>
 
+_Static_assert(sizeof(properties_t) <= SAVE_PROP_CONFIG_SIZE, "Calibration exceeds its flash slot");
+_Static_assert(sizeof(config_t) <= SAVE_CONFIG_SIZE, "Configuration exceeds its flash slot");
+
 // Semaphore to protect flash operations from concurrent access
 static semaphore_t flash_operation_semaphore;
 

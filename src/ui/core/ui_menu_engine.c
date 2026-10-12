@@ -351,10 +351,13 @@ void ui_menu_lever(uint16_t status) {
   }
 
   do {
-    uint32_t mask = 1 << selection;
-    if (status & EVT_UP)
+    uint32_t mask = selection >= 0 ? 1U << selection : 0;
+    // Touch leaves no selected item. Either roller direction must enter the menu.
+    if (selection < 0 && (status & (EVT_UP | EVT_DOWN)))
+      selection = (status & EVT_UP) ? 0 : count - 1;
+    else if (status & EVT_UP)
       selection++;
-    if (status & EVT_DOWN)
+    else if (status & EVT_DOWN)
       selection--;
     // close menu if no menu item
     if ((uint16_t)selection >= count) {
@@ -370,7 +373,7 @@ void ui_menu_touch(int touch_x, int touch_y) {
   if (LCD_WIDTH - MENU_BUTTON_WIDTH < touch_x) {
     int16_t i = (touch_y - MENU_BUTTON_Y_OFFSET) / menu_button_height;
     if ((uint16_t)i < (uint16_t)current_menu_get_count()) {
-      uint32_t mask = (1 << i) | (1 << selection);
+      uint32_t mask = (1U << i) | (selection >= 0 ? 1U << selection : 0);
       selection = i;
       menu_draw(mask);
       touch_wait_release();

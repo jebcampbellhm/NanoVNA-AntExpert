@@ -648,9 +648,9 @@ static void handle_button_ext(EXTDriver* extp, expchannel_t channel) {
 
 static const EXTConfig extcfg = {
     {{EXT_CH_MODE_DISABLED, NULL},
-     {EXT_CH_MODE_RISING_EDGE | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, handle_button_ext}, // EXT1
-     {EXT_CH_MODE_RISING_EDGE | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, handle_button_ext}, // EXT2
-     {EXT_CH_MODE_RISING_EDGE | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, handle_button_ext}, // EXT3
+     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, handle_button_ext}, // EXT1
+     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, handle_button_ext}, // EXT2
+     {EXT_CH_MODE_BOTH_EDGES | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOA, handle_button_ext}, // EXT3
      {EXT_CH_MODE_DISABLED, NULL},
      {EXT_CH_MODE_DISABLED, NULL},
      {EXT_CH_MODE_DISABLED, NULL},
@@ -677,9 +677,9 @@ static void ui_init_ext(void) {
 #else
 static void ui_init_ext(void) {
   extStart();
-  ext_channel_enable(1, EXT_CH_MODE_RISING_EDGE | EXT_MODE_GPIOA);
-  ext_channel_enable(2, EXT_CH_MODE_RISING_EDGE | EXT_MODE_GPIOA);
-  ext_channel_enable(3, EXT_CH_MODE_RISING_EDGE | EXT_MODE_GPIOA);
+  ext_channel_enable(1, EXT_CH_MODE_BOTH_EDGES | EXT_MODE_GPIOA);
+  ext_channel_enable(2, EXT_CH_MODE_BOTH_EDGES | EXT_MODE_GPIOA);
+  ext_channel_enable(3, EXT_CH_MODE_BOTH_EDGES | EXT_MODE_GPIOA);
 }
 #endif
 
