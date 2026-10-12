@@ -11,7 +11,7 @@ drive strengths and codec gains come from [hugen79/NanoVNA-H 1.2.50](https://git
 NanoVNA-X already supports the 600 Hz minimum and a configurable approximately
 300 MHz harmonic threshold, so those global defaults are unchanged. Existing
 NanoVNA-X RF settling constants are retained and need confirmation on physical
-hardware; the startup and timer handling fixes below do not change those values.
+hardware; the separate runtime fixes do not change those values.
 
 ## Build and automated checks
 
@@ -50,6 +50,10 @@ was checked across restart and after Clear Config. The tested device image
 also contains the separately proposed runtime/USB reliability fixes; this RF
 branch alone has not been flashed. Host register-level tests cover both H/H4,
 but no physical NanoVNA-H rev3.7 or exhaustive RF accuracy claim is made.
+
+The final integration check confirmed normal display sweeping and a successful
+NanoVNA-Saver sweep on COM13. Twelve USB channel reads across three serial
+sessions each returned all 401 points while continuous sweeping was active.
 
 The separate reliability PR addresses capture-task starvation, timer rollover,
 ADC readiness, USB snapshots and CDC session handling. Antenna Mode is not

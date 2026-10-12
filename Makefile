@@ -411,6 +411,11 @@ $(TEST_BUILD_DIR)/test_display_presenter: tests/unit/test_display_presenter.c \
 $(TEST_BUILD_DIR)/test_accuracy_analysis: tests/unit/test_accuracy_analysis.c src/processing/vna_math.c | $(TEST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -DNANOVNA_HOST_TEST -Itests/stubs -Iinclude -Isrc -o $@ $^ $(HOST_LDFLAGS)
 
+.PHONY: test_rf_startup
+test: test_rf_startup
+test_rf_startup:
+	$(HOST_PYTHON) tests/unit/test_rf_startup.py
+
 $(TEST_BUILD_DIR)/test_si5351: tests/unit/test_si5351.c src/driver/si5351.c \
         include/driver/si5351.h tests/stubs/si5351/nanovna.h | $(TEST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -Itests/stubs/si5351 -Itests/stubs -Iinclude -Isrc -o $@ $(filter %.c,$^) $(HOST_LDFLAGS)
@@ -471,8 +476,3 @@ else
 	@etags *.[ch] boards/STM32F072/*.[ch] $(shell find third_party/ChibiOS -name \*.\[ch\] -print)
 endif
 	@ls -l TAGS
-
-.PHONY: test_rf_startup
-test: test_rf_startup
-test_rf_startup:
-	$(HOST_PYTHON) tests/unit/test_rf_startup.py
