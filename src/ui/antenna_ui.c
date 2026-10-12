@@ -260,6 +260,7 @@ static void draw_strip(void) {
   } else {
     line(42,165,42,245); line(42,245,466,245);
     line(42,225,466,225); label("2:1",4,220,1); label("5",18,164,1);
+    line(42,205,466,205); label("3:1",4,200,1);
     if (band == ANTENNA_60M_BAND) {
       for (unsigned i = 0; i < ANTENNA_60M_CHANNELS; ++i) {
         int x = 42 + (uint64_t)(antenna_60m_centers[i]-expected_start)*424 /
