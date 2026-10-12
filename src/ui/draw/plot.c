@@ -31,6 +31,8 @@
 #include "chprintf.h"
 #include "nanovna.h"
 #include "ui/antenna_ui.h"
+#include "ui/menus/menu_system.h"
+#include "ui/core/ui_menu_engine.h"
 #include "sys/state_manager.h"
 
 // Icons bitmap resources
@@ -951,6 +953,13 @@ static void draw_battery_status(void) {
 //            Draw all request
 //**************************************************************************************
 void draw_all(void) {
+#ifdef NANOVNA_F303
+  if (menu_mode_help_active()) {
+    if (redraw_request & REDRAW_CLRSCR) menu_draw(-1);
+    redraw_request = 0;
+    return;
+  }
+#endif
 #ifdef __USE_BACKUP__
   if (redraw_request & REDRAW_BACKUP)
     update_backup_data();

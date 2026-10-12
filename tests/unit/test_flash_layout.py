@@ -26,3 +26,11 @@ for index, (board, chip, total) in enumerate((('STM32F303', 'STM32F303xC', 256*1
     assert required <= storage_size
     assert code + code_size <= storage + storage_size - required
 print('[PASS] firmware/calibration/configuration flash regions do not overlap')
+
+grid = (ROOT / 'include/processing/antenna_cal_grid.h').read_text()
+scratch = int(re.search(r'ANT_CAL_SCRATCH (0x[0-9a-fA-F]+)', grid).group(1),16)
+plane = int(re.search(r'ANT_CAL_PLANE_BYTES (\d+)', grid).group(1))
+assert scratch >= constants('FLASH_CALIBRATION_SECTOR_START')[0] + constants('FLASH_CALIBRATION_SECTOR_SIZE')[0]
+assert scratch % 2048 == 0 and plane % 2048 == 0
+assert 401*2*4 <= plane and scratch+6*plane <= 0x08040000
+print('[PASS] ANT staging is page-aligned and outside firmware/saved calibration/configuration')

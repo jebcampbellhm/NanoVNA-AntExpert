@@ -21,6 +21,7 @@
 #include "processing/calibration.h"
 #include <string.h>
 #include "nanovna.h"
+#include "processing/antenna_cal.h"
 #include "rf/sweep.h"
 
 // Forward declarations of static functions
@@ -165,6 +166,15 @@ void cal_collect(uint16_t type) {
   };
   if (type >= ARRAY_COUNT(calibration_set))
     return;
+
+#ifdef NANOVNA_F303
+  // Ordinary calibration always creates a uniform grid.
+  if (current_props.magic == ANT_CAL_MAGIC) {
+    current_props.magic = PROPERTIES_MAGIC;
+    cal_status = 0;
+    memset(current_props._reserved1, 0, sizeof current_props._reserved1);
+  }
+#endif
 
   // reset old calibration if frequency range/points not some
   freq_t cal_start, cal_stop;

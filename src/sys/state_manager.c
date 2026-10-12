@@ -134,7 +134,9 @@ static void load_settings(void) {
       lever_mode = bk.leveler;
       uint32_t backup_mode = get_backup_data32(4);
       if (backup_mode != 0xFFFFFFFFU) {
-        config._vna_mode = backup_mode | (1 << VNA_MODE_BACKUP);
+        // Confirmation belongs to saved configuration, not stale RTC backup.
+        config._vna_mode = (backup_mode & ~VNA_MODE_RF_CONFIRMED_MASK) |
+                          (config._vna_mode & VNA_MODE_RF_CONFIRMED_MASK) | (1 << VNA_MODE_BACKUP);
       } else {
         config._vna_mode |= (1 << VNA_MODE_BACKUP);
       }

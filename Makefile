@@ -214,6 +214,8 @@ CSRC = $(STARTUPSRC) \
        src/ui/menus/menu_main.c \
        src/ui/antenna_ui.c \
        src/processing/antenna.c \
+       src/processing/antenna_cal_grid.c \
+       src/processing/antenna_cal.c \
        src/ui/menus/menu_cal.c \
        src/ui/menus/menu_display.c \
        src/ui/menus/menu_marker.c \
@@ -445,6 +447,8 @@ test: tests
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_usb_control.py
 	$(HOST_PYTHON) tests/unit/test_flash_layout.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_roller_input.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_antenna_cal.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_mode_guidance.py
 
 # Define ChibiOS sources and objects (handle potential ./ prefix)
 CHIBIOS_SOURCES := $(filter third_party/ChibiOS/% ./third_party/ChibiOS/%, $(CSRC))

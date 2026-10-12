@@ -21,6 +21,7 @@
 #pragma GCC optimize("O2")
 
 #include "rf/sweep.h"
+#include "processing/antenna_cal.h"
 
 #include "hal.h"
 #include "driver/si5351.h"
@@ -475,7 +476,11 @@ uint16_t app_measurement_get_sweep_mask(void) {
     ch_mask |= SWEEP_USE_RENORMALIZATION;
   }
 #endif
-  if (cal_status & CALSTAT_APPLY) {
+  if ((cal_status & CALSTAT_APPLY)
+#ifdef NANOVNA_F303
+      && (config._vna_mode & VNA_MODE_RF_CONFIRMED_MASK)
+#endif
+     ) {
     ch_mask |= SWEEP_APPLY_CALIBRATION;
   }
   if (cal_status & CALSTAT_INTERPOLATED) {
@@ -532,6 +537,9 @@ static void apply_ch1_error_term(float data[4], float c_data[CAL_TYPE_COUNT][2])
 }
 
 static void cal_interpolate(int idx, freq_t f, float data[CAL_TYPE_COUNT][2]) {
+#ifdef NANOVNA_F303
+  if (antenna_cal_interpolate(f, data)) return;
+#endif
   uint16_t src_points = cal_sweep_points - 1;
   if (idx >= 0) {
     // Direct point copy if index provided
@@ -907,6 +915,9 @@ void app_measurement_set_frequencies(freq_t start, freq_t stop, uint16_t points)
 }
 
 freq_t get_frequency(uint16_t idx) {
+#ifdef NANOVNA_F303
+  if (antenna_cal_capture) return antenna_cal_frequency(antenna_cal_capture-1,idx);
+#endif
   return frequencies[idx];
 }
 
@@ -926,6 +937,9 @@ void app_measurement_set_frequencies(freq_t start, freq_t stop, uint16_t points)
 }
 
 freq_t get_frequency(uint16_t idx) {
+#ifdef NANOVNA_F303
+  if (antenna_cal_capture) return antenna_cal_frequency(antenna_cal_capture-1,idx);
+#endif
   return _f_start + _f_delta * idx + (_f_points / 2U + _f_error * idx) / _f_points;
 }
 

@@ -2,13 +2,17 @@
 #include "nanovna.h"
 #include "ui/antenna_ui.h"
 #ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
 #include "processing/antenna.h"
+#include "processing/antenna_cal.h"
 #include "ui/core/ui_core.h"
 #include "ui/core/ui_menu_engine.h"
 #include "ui/menus/menu_cal.h"
 #include <string.h>
 
 static bool active, picker, tuning, valid;
+static bool cal_page;
+static uint8_t cal_mask;
 static unsigned band = 5, group, page;
 static uint32_t favorites;
 static freq_t tune_frequency, expected_start, expected_stop;
@@ -84,6 +88,7 @@ static void apply_range(void) {
   sweep_points = tuning ? 21 : antenna_points;
   props_mode &= ~(DOMAIN_MODE | TD_CENTER_SPAN);
   current_props._portz = 50;
+  antenna_cal_load(band >= 10);
   sweep_mode |= SWEEP_ENABLE;
   valid = false;
   app_measurement_update_frequencies();
@@ -176,7 +181,35 @@ static int graph_y(float v) {
   if (v > 5) v = 5;
   return 245 - (int)((v-1)*20);
 }
+static unsigned required_profiles(void) {
+  unsigned mask=0;
+  for (unsigned p=0;p<2;++p) {
+    if (!antenna_cal_saved(p)) mask |= 1u<<p;
+  }
+  return mask;
+}
+static void draw_cal(void) {
+  unsigned stage=antenna_cal_stage();
+  label("ANTENNA CAL",12,12,3);
+  if (!stage) {
+    label("401 points in each profile",12,60,2);
+    unsigned required=required_profiles();
+    button((cal_mask & 1) ? "HF ANT: CAPTURE" : "HF ANT: KEEP",12,100,456,50);
+    label((required & 1) ? "Needs ANT CAL - included" : "Saved - tap to toggle",24,156,1);
+    button((cal_mask & 2) ? "V/U ANT: CAPTURE" : "V/U ANT: KEEP",12,182,456,50);
+    label((required & 2) ? "Needs ANT CAL - included" : "Saved - tap to toggle",24,238,1);
+  } else {
+    label(stage==1 ? "Connect OPEN" : stage==2 ? "Connect SHORT" :
+          stage==3 ? "Connect 50 ohm LOAD" : "Ready to save",12,82,3);
+    label("At the antenna cable end",12,136,2);
+    label(cal_mask==3 ? "HF + V/U: one connection" : (cal_mask&1) ? "HF ANT" : "V/U ANT",12,181,2);
+    label(stage==4 ? "Replaces selected ANT slots" : "Then tap CAPTURE below",12,230,2);
+  }
+  button("CANCEL",0,276,200,44);
+  button(!stage ? "START" : stage==4 ? "SAVE" : "CAPTURE",200,276,280,44);
+}
 static void draw_strip(void) {
+  if (cal_page) { draw_cal(); return; }
   if (picker) { draw_picker(); return; }
   char s[80];
   label(antenna_bands[band].name,12,8,2);
@@ -190,8 +223,12 @@ static void draw_strip(void) {
       cal = "CAL: OUTSIDE SAVED RANGE";
     else if ((cal_status & (CALSTAT_ED|CALSTAT_ES|CALSTAT_ER)) !=
                          (CALSTAT_ED|CALSTAT_ES|CALSTAT_ER)) cal = "CAL: INCOMPLETE S11";
+    else if (current_props.magic == ANT_CAL_MAGIC)
+      cal = antenna_cal_range(current_props._reserved1[0],expected_start,expected_stop) ?
+            (band<10 ? "CAL: HF ANT" : "CAL: V/U ANT") : "CAL: OUTSIDE ANT BANDS";
     else cal = (cal_status & CALSTAT_INTERPOLATED) ? "CAL: INTERPOLATED" : "CAL: APPLIED";
   }
+  if (!(config._vna_mode & VNA_MODE_RF_CONFIRMED_MASK)) cal = "CONFIRM HARDWARE MODE";
   label(cal,12,42,1);
   // Small grooved roller and its current left/right function.
   line(338,46,341,43); line(338,46,341,49);
@@ -299,6 +336,26 @@ static void tune_step(bool up) {
 bool antenna_ui_touch(int x, int y) {
   if (!active) return false;
   touch_wait_release();
+  if (cal_page) {
+    unsigned stage=antenna_cal_stage();
+    if (y>=276 && x<200) {
+      antenna_cal_cancel(); cal_page=false; apply_range();
+    } else if (y>=276) {
+      if (!stage) {
+        cal_mask |= required_profiles();
+        if (cal_mask) antenna_cal_begin(cal_mask);
+      } else if (!antenna_cal_step()) {
+        ui_message_box("CAL ERROR","Capture/save failed. Retry or cancel.",1500);
+      } else if (!antenna_cal_stage()) {
+        cal_page=false; apply_range();
+      }
+    } else if (!stage) {
+      if (y>=100 && y<175) cal_mask ^= 1;
+      if (y>=182 && y<260) cal_mask ^= 2;
+      cal_mask |= required_profiles();
+    }
+    redraw(); return true;
+  }
   if (picker) {
     uint8_t list[ANTENNA_BAND_COUNT]; unsigned n = band_list(list);
     if (y < 36 && x >= 260) {
@@ -335,12 +392,7 @@ bool antenna_ui_touch(int x, int y) {
                    antenna_bands[band].start+(antenna_bands[band].stop-antenna_bands[band].start)/2;
       tuning = true; apply_range();
     } else {
-      // Calibrate the entire selected band, never just the tune frequency.
-      tuning = false; apply_range(); menu_push_submenu(menu_cal_menu); ui_mode_menu();
-      // apply_range queued a full clear. Consume it before painting the menu,
-      // otherwise the later plot redraw erases the freshly drawn CAL buttons.
-      draw_all(); menu_draw(-1);
-      return true;
+      tuning=false; cal_page=true; cal_mask=3;
     }
   } else if (tuning && y >= 173 && y < 231) {
     if (x < 206) tune_step(false); else if (x >= 274) tune_step(true);
@@ -349,6 +401,7 @@ bool antenna_ui_touch(int x, int y) {
 }
 bool antenna_ui_lever(uint16_t status) {
   if (!active) return false;
+  if (cal_page) return true; // Walkthrough uses explicit touch actions.
   if (status & EVT_BUTTON_SINGLE_CLICK) { picker = !picker; page = 0; }
   else if (tuning && !picker && (status & (EVT_UP|EVT_DOWN))) tune_step((status & EVT_UP) != 0);
   else if (status & (EVT_UP|EVT_DOWN)) {

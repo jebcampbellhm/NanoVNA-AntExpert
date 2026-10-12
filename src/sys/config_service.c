@@ -24,9 +24,13 @@
 #include "nanovna.h"
 #include "sys/config_service.h"
 #include "sys/event_bus.h"
+#include "processing/antenna_cal.h"
 
 #include <stdbool.h>
 #include <string.h>
+#ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
+#endif
 
 _Static_assert(sizeof(properties_t) <= SAVE_PROP_CONFIG_SIZE, "Calibration exceeds its flash slot");
 _Static_assert(sizeof(config_t) <= SAVE_CONFIG_SIZE, "Configuration exceeds its flash slot");
@@ -91,14 +95,15 @@ static int config_save_impl(void) {
 
   // write to flash
   flash_program_half_word_buffer((uint16_t*)SAVE_CONFIG_ADDR, (uint16_t*)&config, sizeof(config_t));
+  int result = memcmp((const void *)SAVE_CONFIG_ADDR, &config, sizeof config) ? -1 : 0;
   
   // Release the semaphore
   chSemSignal(&flash_operation_semaphore);
   
-  if (config_event_bus != NULL) {
+  if (result == 0 && config_event_bus != NULL) {
     event_bus_publish(config_event_bus, EVENT_STORAGE_UPDATED, NULL);
   }
-  return 0;
+  return result;
 }
 
 static int config_recall_impl(void) {
@@ -112,12 +117,18 @@ static int config_recall_impl(void) {
   return 0;
 }
 
-static int caldata_save_impl(uint32_t id) {
+static int save_properties(uint32_t id, bool antenna) {
   if (id >= SAVEAREA_MAX)
     return -1;
+#ifdef NANOVNA_F303
+  if (id >= ANT_CAL_FIRST_SLOT && !antenna)
+    return -1;
+  if (current_props.magic == ANT_CAL_MAGIC && !antenna_cal_valid(&current_props))
+    return -1; // Never relabel a nonuniform grid as legacy uniform calibration.
+#endif
 
   // Don't save during critical calibration phase to prevent data corruption
-  if (calibration_in_progress) {
+  if (calibration_in_progress && !antenna) {
     return -1;  // Return error to indicate save was denied
   }
 
@@ -127,19 +138,48 @@ static int caldata_save_impl(uint32_t id) {
     return -1;
 
   // Apply magic word and calculate checksum
-  current_props.magic = PROPERTIES_MAGIC;
+#ifdef NANOVNA_F303
+  if (!antenna_cal_valid(&current_props))
+#endif
+    current_props.magic = PROPERTIES_MAGIC;
   current_props.checksum =
       checksum(&current_props, sizeof current_props - sizeof current_props.checksum);
 
   // write to flash
   uint16_t* dst = (uint16_t*)calibration_slot_area(id);
   flash_program_half_word_buffer(dst, (uint16_t*)&current_props, sizeof(properties_t));
-
-  lastsaveid = id;
+  checksum_ok &= ~(1u << id);
+  int result = memcmp(dst, &current_props, sizeof current_props) ? -1 : 0;
+  if (result == 0) lastsaveid = id;
   
   chSemSignal(&flash_operation_semaphore);
-  return 0;
+  return result;
 }
+
+static int caldata_save_impl(uint32_t id) { return save_properties(id, false); }
+
+#ifdef NANOVNA_F303
+_Static_assert(ANT_CAL_SCRATCH >= SAVE_CONFIG_ADDR + SAVE_CONFIG_SIZE, "ANT staging overlaps saved storage");
+_Static_assert(ANT_CAL_SCRATCH + 6 * ANT_CAL_PLANE_BYTES <= 0x08040000u, "ANT staging exceeds H4 flash");
+/* Dedicated writer: ordinary UI, shell and autosave cannot write ANT slots. */
+int antenna_cal_store(unsigned profile) {
+  if (profile > 1 || antenna_cal_stage() != 4 ||
+      !antenna_cal_valid(&current_props) || current_props._reserved1[0] != profile)
+    return -1;
+  return save_properties(ANT_CAL_FIRST_SLOT + profile, true);
+}
+int antenna_cal_stage_write(unsigned plane, const void *data, unsigned size) {
+  if (plane >= 6 || size != ANT_CAL_POINTS * 2 * sizeof(float) ||
+      antenna_cal_stage() < 1 || antenna_cal_stage() > 3)
+    return -1;
+  if (chSemWaitTimeout(&flash_operation_semaphore, MS2ST(500)) != MSG_OK) return -1;
+  void *dst = (void *)(uintptr_t)(ANT_CAL_SCRATCH + plane * ANT_CAL_PLANE_BYTES);
+  flash_program_half_word_buffer(dst, (uint16_t *)data, size);
+  int result = memcmp(dst, data, size) ? -1 : 0;
+  chSemSignal(&flash_operation_semaphore);
+  return result;
+}
+#endif
 
 const properties_t* get_properties(uint32_t id) {
   if (id >= SAVEAREA_MAX)
@@ -149,7 +189,11 @@ const properties_t* get_properties(uint32_t id) {
   // Check crc cache mask (made it only 1 time)
   if (checksum_ok & (1 << id))
     return src;
-  if (src->magic != PROPERTIES_MAGIC ||
+  bool magic_ok = src->magic == PROPERTIES_MAGIC;
+#ifdef NANOVNA_F303
+  magic_ok |= antenna_cal_valid(src);
+#endif
+  if (!magic_ok ||
       checksum(src, sizeof *src - sizeof src->checksum) != src->checksum)
     return NULL;
   checksum_ok |= 1 << id;
@@ -194,7 +238,13 @@ static void clear_all_config_prop_data_impl(void) {
   lastsaveid = NO_SAVE_SLOT;
   checksum_ok = 0;
   // unlock and erase flash pages
+#ifdef NANOVNA_F303
+  // ANT profiles are replaced only by the antenna walkthrough.
+  flash_erase_pages(SAVE_PROP_CONFIG_ADDR, ANT_CAL_FIRST_SLOT * SAVE_PROP_CONFIG_SIZE);
+  flash_erase_pages(SAVE_CONFIG_ADDR, SAVE_CONFIG_SIZE);
+#else
   flash_erase_pages(SAVE_PROP_CONFIG_ADDR, SAVE_FULL_AREA_SIZE);
+#endif
   
   // Release the semaphore
   chSemSignal(&flash_operation_semaphore);

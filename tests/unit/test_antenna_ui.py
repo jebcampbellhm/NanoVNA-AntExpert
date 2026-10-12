@@ -58,8 +58,11 @@ extern const menuitem_t menu_cal_menu[];
 extern uint32_t frequency0, frequency1, cal_frequency0, cal_frequency1;
 extern uint16_t sweep_points, props_mode, cal_status;
 extern uint8_t sweep_mode, ui_mode;
-extern struct config_stub { uint8_t _reserved[3]; } config;
-extern struct props_stub { float _portz; } current_props;
+#define VNA_MODE_RF_CONFIRMED_MASK 0x8000u
+extern struct config_stub { uint8_t _reserved[3]; uint16_t _vna_mode; } config;
+typedef struct props_stub { float _portz; uint32_t magic, _reserved1[5]; } properties_t;
+extern struct props_stub current_props;
+#define CAL_TYPE_COUNT 5
 extern float measured[2][401][2];
 void request_to_redraw(uint16_t mask);
 void lcd_drawstring_size(const char *,int,int,uint8_t);
@@ -89,14 +92,21 @@ HARNESS = r'''
 uint32_t frequency0=1000000, frequency1=30000000, cal_frequency0, cal_frequency1;
 uint16_t sweep_points=101, props_mode=DOMAIN_MODE|TD_CENTER_SPAN, cal_status;
 uint8_t sweep_mode=0, ui_mode=UI_MENU;
-struct config_stub config;
-struct props_stub current_props={75};
+struct config_stub config={._vna_mode=VNA_MODE_RF_CONFIRMED_MASK};
+struct props_stub current_props={._portz=75};
 float measured[2][401][2];
 const menuitem_t menu_cal_menu[]={1};
 static unsigned writes, messages, updates, menus;
 static bool fail_save;
 static uint16_t pending_redraw;
 static bool menu_visible;
+static unsigned cal_stage, capture_mask;
+bool antenna_cal_saved(unsigned p) { (void)p; return false; }
+bool antenna_cal_load(unsigned p) { (void)p; return false; }
+bool antenna_cal_begin(unsigned mask) { capture_mask=mask; cal_stage=1; return true; }
+bool antenna_cal_step(void) { cal_stage=(cal_stage+1)%5; return true; }
+void antenna_cal_cancel(void) { cal_stage=0; }
+unsigned antenna_cal_stage(void) { return cal_stage; }
 static int color=1;
 static uint8_t pixels[320][480];
 pixel_t spi_buffer[SPI_BUFFER_SIZE];
@@ -226,11 +236,21 @@ int main(void) {
   assert(frequency0==14350000);
   for(unsigned i=0;i<300;i++) antenna_ui_touch(20,200);
   assert(frequency0==14000000);
-  antenna_ui_touch(400,295); assert(menus==1 && ui_mode==UI_MENU);
-  assert(menu_visible && pending_redraw==0);
-  draw_all(); assert(menu_visible); // The next service-loop draw cannot erase CAL.
+  antenna_ui_touch(400,295); assert(menus==0 && ui_mode==UI_NORMAL);
+  preview("cal-profiles");
+  antenna_ui_touch(100,120); // Empty HF cannot be deselected.
+  antenna_ui_touch(100,210); // Empty V/U cannot be deselected.
+  antenna_ui_touch(400,295); assert(cal_stage==1 && capture_mask==3);
+  preview("cal-open");
+  antenna_ui_touch(400,295); assert(cal_stage==2);
+  preview("cal-short");
+  antenna_ui_touch(400,295); assert(cal_stage==3);
+  preview("cal-load");
+  antenna_ui_touch(400,295); assert(cal_stage==4);
+  preview("cal-save");
+  antenna_ui_touch(400,295); assert(cal_stage==0);
   assert(frequency0==14000000 && frequency1==14350000 && sweep_points==101);
-  assert(!antenna_ui_draw()); ui_mode_normal();
+  assert(antenna_ui_draw());
   cal_frequency0=14000000; cal_frequency1=14350000;
   cal_status=CALSTAT_APPLY|CALSTAT_ED|CALSTAT_ES|CALSTAT_ER;
   sample(); preview("calibrated");
@@ -353,5 +373,6 @@ with tempfile.TemporaryDirectory() as d:
     subprocess.run(command + ['-std=c11', '-Wall', '-Wextra', '-Werror', '-DNANOVNA_F303=1',
         '-I' + str(tmp), '-I' + str(ROOT / 'include'), str(tmp / 'harness.c'),
         str(ROOT / 'src/ui/antenna_ui.c'), str(ROOT / 'src/processing/antenna.c'),
+        str(ROOT / 'src/processing/antenna_cal_grid.c'),
         str(ROOT / 'src/ui/resources/fonts/Font7x11b.c'), '-lm', '-o', str(tmp / 'test')], check=True)
     subprocess.run([str(tmp / 'test')], check=True)

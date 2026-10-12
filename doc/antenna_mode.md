@@ -218,7 +218,7 @@ STM32CubeProgrammer verified the download and started it on device 205431682033.
 A readback confirmed all bytes from `0x0801C800` through the end of flash were
 unchanged by the update. On-device roller and calibration retesting is pending.
 
-### Guided antenna calibration design (not implemented)
+### Guided antenna calibration capacity and original design
 
 H4 has seven 16 KiB internal slots. Each current `properties_t` record is 16,244
 bytes, including five complex correction arrays at 401 points. A 101-point save
@@ -255,3 +255,60 @@ For a future multiband display, interpolate within each calibrated segment and
 switch segments for each band. Do not assume interpolation across unmeasured gaps
 or harmonic transitions is accurate. Validate with known loads, cable lengths and
 comparison sweeps on hardware. No calibration accuracy is established by host tests.
+
+### Two protected ANT profiles (2026-10-12)
+
+The current implementation uses two internal profiles rather than an SD container.
+Slot 5 is HF ANT (160m through 10m); slot 6 is V/U ANT (6m, 2m, 1.25m, 70cm,
+33cm and 23cm). Each has 401 total points on an immutable, versioned grid. Counts
+by band are 40/50/21/50/25/50/30/45/25/65 for HF and 61/91/41/101/46/61 for V/U.
+The existing property record size and slot addresses are unchanged. A distinct
+ANT1 magic prevents old firmware from interpreting these as uniform calibrations.
+Correction covers the band segments only; gaps and frequencies outside the profile
+use identity correction. It is not a continuous broadband calibration. Coefficients
+are never blended across a harmonic-mode boundary. RF mode, oscillator frequency,
+IF offset, harmonic threshold and calibration drive level are recorded/checked.
+
+ANTENNA > CAL shows CAPTURE/KEEP toggles for both profiles. Missing, legacy or
+incompatible profiles are automatically included. Existing matching profiles may
+be kept. START prompts OPEN, then SHORT, then a 50-ohm LOAD at the cable end.
+CAPTURE measures both selected profiles before advancing to the next connection.
+SAVE replaces only the selected profiles, and checks flash readback. The first
+save replaces any pre-existing ordinary records in slots 5/6. ANT mode selects
+the appropriate saved coefficients automatically when switching bands.
+
+Temporary raw captures use six page-aligned 4 KiB planes from `0x08039000`, in
+previously unused H4 flash. No SD card or second in-RAM property record is needed.
+Cancel before SAVE leaves both saved profiles unchanged. The two final slot writes
+are individually verified, not a power-loss-atomic pair: interruption during SAVE
+can leave one updated slot and one previous/invalid slot. Retry a reported save
+failure before leaving; incomplete records are rejected by checksum. Captures
+do not resume across power cycles. Legacy SD `.cal` import does not yet restore
+ANT1 profiles; use an entire flash backup until a versioned export/import is added.
+
+Normal SAVE CAL offers only slots 0–4. Ordinary saves, USB save commands and
+autosave cannot write slots 5/6; Clear Config preserves those ANT slots. Native
+H/F072 retains its ordinary slot behavior. Full hardware validation remains
+necessary, especially at 33cm/23cm and across harmonic transitions.
+
+MODE now opens H4 hardware choices with a left-side explanation and SAVE CONFIG
+reminder. Configuration bit 15 records explicit hardware-mode confirmation without
+changing configuration size. Missing confirmation opens this screen after UI/plot
+initialization and disables applied sweep correction. It does not erase settings
+or saved calibration. Save failure does not set confirmation, and RTC backup cannot
+override it. Selecting another mode clears confirmation and active calibration;
+recalibrate after changing hardware mode. Existing legacy calibrations do not have
+the RF compatibility metadata of ANT1 and should only be recalled deliberately
+when the hardware/settings are known to match.
+
+Validation: all 14 C suites and ten Python checks passed normally and with
+ASan/UBSan in WSL. Clean H4 and H builds passed; H4 text/data/bss are
+115,972/552/48,468 bytes, H values 98,016/328/15,104. The H4 binary is 116,524
+bytes, leaving 212 bytes below the protected calibration boundary. Standard CMSIS
+stack-pointer clobber warnings remain. Firmware-font previews were inspected for
+the profile selector, capture prompts and mode guidance. H4 SHA-256:
+`0cad21f6eb2a2b2f0b62abe3e670fa01efd9939a29dc3cef2c21d28ea2daac3a`.
+The image was flashed, readback-verified and started on 205431682033. A full backup
+was taken first, and storage from `0x0801C800` through the end of flash was confirmed
+unchanged before restart. Physical OSL accuracy, both-profile capture/save/restart,
+mode-confirmation persistence and USB/Saver regression checks remain pending.

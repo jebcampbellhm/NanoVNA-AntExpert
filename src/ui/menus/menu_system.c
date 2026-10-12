@@ -31,6 +31,9 @@
 #include "sys/config_service.h"
 #include "sys/event_bus.h"
 #include <string.h>
+#ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
+#endif
 
 // Enums for config callback
 enum {
@@ -338,6 +341,7 @@ static const option_desc_t band_mode_options[] = {
 };
 
 
+#ifndef NANOVNA_F303
 static UI_FUNCTION_ADV_CALLBACK(menu_band_sel_acb) {
   (void)data;
   uint16_t mode = config._band_mode;
@@ -350,15 +354,74 @@ static UI_FUNCTION_ADV_CALLBACK(menu_band_sel_acb) {
   si5351_set_band_mode(config._band_mode);
   config_service_notify_configuration_changed();
 }
+#endif
 
 static UI_FUNCTION_CALLBACK(menu_save_mode_cb) {
   (void)data;
-  if (config_save() != 0)
-    ui_message_box("Save Mode", "Save failed", 1500);
-  else
-    ui_message_box("Save Mode", "Mode saved", 1000);
+  uint16_t old = config._vna_mode;
+  config._vna_mode |= VNA_MODE_RF_CONFIRMED_MASK;
+  if (config_save() != 0) {
+    config._vna_mode = old;
+    ui_message_box("Save Config", "Save failed", 1500);
+  } else
+    ui_message_box("Save Config", "Hardware mode saved", 1000);
   request_to_redraw(REDRAW_ALL);
 }
+
+#ifdef NANOVNA_F303
+static UI_FUNCTION_ADV_CALLBACK(menu_hardware_mode_acb) {
+  if (b) {
+    b->icon = config._band_mode == data ? BUTTON_ICON_GROUP_CHECKED : BUTTON_ICON_GROUP;
+    return;
+  }
+  config._band_mode = data;
+  config._vna_mode &= ~VNA_MODE_RF_CONFIRMED_MASK;
+  si5351_set_band_mode(data);
+  cal_status &= ~CALSTAT_APPLY;
+  request_to_redraw(REDRAW_ALL);
+}
+static const menuitem_t menu_hardware_mode[] = {
+  {MT_ADV_CALLBACK, SI5351_BAND_SI5351, "DIRECT", menu_hardware_mode_acb},
+  {MT_ADV_CALLBACK, SI5351_BAND_MS5351, "DIV", menu_hardware_mode_acb},
+  {MT_ADV_CALLBACK, SI5351_BAND_SWC5351, "MULTI", menu_hardware_mode_acb},
+  {MT_ADV_CALLBACK, SI5351_BAND_ZEETK, "ZEETK", menu_hardware_mode_acb},
+  {MT_CALLBACK, 0, "SAVE CONFIG", menu_save_mode_cb},
+  {MT_NEXT, 0, NULL, menu_back}
+};
+bool menu_mode_help_active(void) {
+  return ui_mode == UI_MENU && current_menu_item(0) == menu_hardware_mode;
+}
+void menu_mode_help_draw(void) {
+  if (!menu_mode_help_active()) return;
+  lcd_set_colors(LCD_FG_COLOR,LCD_BG_COLOR);
+  lcd_fill(0,0,LCD_WIDTH-MENU_BUTTON_WIDTH,LCD_HEIGHT);
+  lcd_drawstring_size("HARDWARE MODE",12,12,2);
+  lcd_drawstring_size("Match the board/chip markings",12,48,1);
+  lcd_drawstring_size("Direct: Si5351A",12,78,2);
+  lcd_drawstring_size("Div: MS5351M",12,114,2);
+  lcd_drawstring_size("Multi: SWC5351",12,150,2);
+  lcd_drawstring_size("ZeeTK: H4 rev4.4",12,186,2);
+  lcd_drawstring_size("ZeeTK NE602A mixers + SJWCH5351",12,216,1);
+  lcd_drawstring_size((config._vna_mode & VNA_MODE_RF_CONFIRMED_MASK) ?
+                      "Mode saved" : "Tap SAVE CONFIG",12,254,2);
+  lcd_drawstring_size("Changing mode needs new calibration",12,293,1);
+}
+static UI_FUNCTION_ADV_CALLBACK(menu_hardware_mode_open_acb) {
+  (void)data;
+  if (b) {
+    b->p1.text = band_mode_options[config._band_mode < 4 ? config._band_mode : 0].label;
+    return;
+  }
+  menu_push_submenu(menu_hardware_mode);
+}
+void menu_mode_startup(void) {
+  if (config._vna_mode & VNA_MODE_RF_CONFIRMED_MASK) return;
+  cal_status &= ~CALSTAT_APPLY;
+  menu_push_submenu(menu_hardware_mode);
+  ui_mode_menu();
+  request_to_redraw(REDRAW_ALL);
+}
+#endif
 
 // RTC Logic
 #ifdef __USE_RTC__
@@ -394,7 +457,11 @@ const menuitem_t menu_connection[] = {
 #endif
 
 const menuitem_t menu_clear[] = {
+#ifdef NANOVNA_F303
+    {MT_CALLBACK, MENU_CONFIG_RESET, "RESET\nKEEP ANT CAL", menu_config_cb},
+#else
     {MT_CALLBACK, MENU_CONFIG_RESET, "CLEAR ALL\nAND RESET", menu_config_cb},
+#endif
     {MT_NEXT, 0, NULL, menu_back} // next-> menu_back
 };
 
@@ -413,8 +480,12 @@ const menuitem_t menu_offset[] = {
 #endif
 
 const menuitem_t menu_device1[] = {
+#ifdef NANOVNA_F303
+    {MT_ADV_CALLBACK, 0, "MODE\n " R_LINK_COLOR "%s", menu_hardware_mode_open_acb},
+#else
     {MT_ADV_CALLBACK, 0, "MODE\n " R_LINK_COLOR "%s", menu_band_sel_acb},
-    {MT_CALLBACK, 0, "SAVE MODE", menu_save_mode_cb},
+#endif
+    {MT_CALLBACK, 0, "SAVE CONFIG", menu_save_mode_cb},
 #ifdef __DIGIT_SEPARATOR__
     {MT_ADV_CALLBACK, VNA_MODE_SEPARATOR, "SEPARATOR\n " R_LINK_COLOR "%s", menu_vna_mode_acb},
 #endif

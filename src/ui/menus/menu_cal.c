@@ -19,6 +19,7 @@
  */
 
 #include "nanovna.h"
+#include "processing/antenna_cal.h"
 #include "ui/menus/menu_cal.h"
 #include "ui/core/ui_menu_engine.h"
 #include "ui/core/ui_core.h"
@@ -26,6 +27,9 @@
 #include "sys/config_service.h"
 #include "driver/si5351.h"
 #include "core/config_macros.h"
+#ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
+#endif
 
 // ===================================
 // Descriptors
@@ -177,6 +181,14 @@ static UI_FUNCTION_ADV_CALLBACK(menu_power_sel_acb) {
 
 static UI_FUNCTION_ADV_CALLBACK(menu_recall_acb) {
   if (b) {
+#ifdef NANOVNA_F303
+    if (data >= ANT_CAL_FIRST_SLOT) {
+      const properties_t *p = get_properties(data);
+      plot_printf(b->label,sizeof(b->label),"%s\n%s",data==5 ? "HF ANT" : "V/U ANT",
+                  p && antenna_cal_valid(p) ? "RECALL" : "USE ANT CAL");
+      return;
+    }
+#endif
     const properties_t* p = get_properties(data);
     if (p)
       plot_printf(b->label, sizeof(b->label), "%.6F" S_Hz "\n%.6F" S_Hz, (float)p->_frequency0,
@@ -241,7 +253,13 @@ static const menuitem_t* menu_build_save_menu(void) {
   *cursor++ =
       (menuitem_t){MT_CALLBACK, FMT_CAL_FILE, "SAVE TO\n SD CARD", menu_sdcard_cb};
 #endif
-  cursor = ui_menu_list(menu_state_slots_desc, ARRAY_COUNT(menu_state_slots_desc), "Empty %d",
+  cursor = ui_menu_list(menu_state_slots_desc,
+#ifdef NANOVNA_F303
+                        ANT_CAL_FIRST_SLOT,
+#else
+                        ARRAY_COUNT(menu_state_slots_desc),
+#endif
+                        "Empty %d",
                         menu_save_acb, cursor);
   menu_set_next(cursor, menu_back);
   return base;

@@ -166,6 +166,7 @@ enum {
 };
 
 // Update config._vna_mode flags function
+#define VNA_MODE_RF_CONFIRMED_MASK 0x8000u
 typedef enum {VNA_MODE_CLR = 0, VNA_MODE_SET, VNA_MODE_TOGGLE} vna_mode_ops;
 
 #ifdef __VNA_MEASURE_MODULE__

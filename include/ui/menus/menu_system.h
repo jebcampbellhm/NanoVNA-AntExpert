@@ -36,6 +36,11 @@ UI_FUNCTION_ADV_CALLBACK(menu_offset_sel_acb);
 UI_FUNCTION_ADV_CALLBACK(menu_vna_mode_acb);
 
 void menu_sys_info(void);
+#ifdef NANOVNA_F303
+bool menu_mode_help_active(void);
+void menu_mode_help_draw(void);
+void menu_mode_startup(void);
+#endif
 void lcd_set_brightness(uint16_t b);
 
 void input_xtal(uint16_t data, button_t* b);

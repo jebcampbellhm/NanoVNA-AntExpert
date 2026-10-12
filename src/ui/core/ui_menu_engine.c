@@ -23,6 +23,7 @@
 #include "nanovna.h"
 #include "ui/core/ui_core.h"
 #include "ui/core/ui_menu_engine.h"
+#include "ui/menus/menu_system.h"
 #include "ui/core/ui_keypad.h"
 #include "ui/draw/display_presenter.h"
 #include "ui/core/hardware_input.h"
@@ -160,6 +161,9 @@ static void ensure_selection(void) {
 void menu_move_back(bool leave_ui) {
   if (menu_current_level == 0)
     return;
+#ifdef NANOVNA_F303
+  if (menu_mode_help_active()) request_to_redraw(REDRAW_AREA | REDRAW_FREQUENCY | REDRAW_CAL_STATUS);
+#endif
   menu_current_level--;
   ensure_selection();
   if (leave_ui)
@@ -268,6 +272,9 @@ static void menu_draw_buttons(const menuitem_t* m, uint32_t mask) {
 }
 
 void menu_draw(uint32_t mask) {
+#ifdef NANOVNA_F303
+  menu_mode_help_draw();
+#endif
   menu_draw_buttons(menu_stack[menu_current_level], mask);
 }
 

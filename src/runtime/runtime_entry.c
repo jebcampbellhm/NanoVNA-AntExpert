@@ -28,7 +28,9 @@
 #include "hal.h"
 #include "driver/si5351.h"
 #include "nanovna.h"
+#include "processing/antenna_cal.h"
 #include "ui/antenna_ui.h"
+#include "ui/menus/menu_system.h"
 #include "sys/shell_service.h"
 #include "sys/shell_commands.h"
 #include "driver/usbcfg.h"
@@ -287,6 +289,9 @@ static THD_FUNCTION(Thread1, arg) {
   // Initialize graph plotting
   plot_init();
   antenna_ui_restore();
+#ifdef NANOVNA_F303
+  menu_mode_startup();
+#endif
   while (1) {
     measurement_engine_tick(&measurement_engine);
   }
@@ -399,6 +404,9 @@ void set_sweep_points(uint16_t points) {
  * Frequency list functions
  */
 bool need_interpolate(freq_t start, freq_t stop, uint16_t points) {
+#ifdef NANOVNA_F303
+  if (current_props.magic == ANT_CAL_MAGIC) return true;
+#endif
   return start != cal_frequency0 || stop != cal_frequency1 || points != cal_sweep_points;
 }
 

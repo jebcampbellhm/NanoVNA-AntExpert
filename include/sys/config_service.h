@@ -48,6 +48,10 @@ void config_service_attach_event_bus(event_bus_t* bus);
 void config_service_notify_configuration_changed(void);
 void config_service_start_calibration(void);
 void config_service_end_calibration(void);
+#ifdef NANOVNA_F303
+int antenna_cal_store(unsigned profile);
+int antenna_cal_stage_write(unsigned plane, const void *data, unsigned size);
+#endif
 
 #ifdef __cplusplus
 }
