@@ -15,6 +15,7 @@ static bool cal_page;
 static uint8_t cal_mask;
 static unsigned band = 5, group, page;
 static uint32_t favorites;
+static bool favorites_only = true;
 static freq_t tune_frequency, expected_start, expected_stop;
 static freq_t saved_start, saved_stop;
 static uint16_t saved_points, saved_mode;
@@ -160,7 +161,7 @@ static void draw_picker(void) {
   button(group == 0 ? "[HF+6]" : "HF+6",0,38,160,42);
   button(group == 1 ? "[V/UHF]" : "V/UHF",160,38,160,42);
   button(group == 2 ? "[FAV]" : "FAV",320,38,160,42);
-  if (!n) label("Use FAV on an antenna screen",12,130,2);
+  if (!n) label("Use + on an antenna screen",12,130,2);
   for (unsigned j = 0; j < 6 && page*6+j < n; ++j) {
     unsigned i = list[page*6+j];
     plot_printf(s,sizeof(s),"%s%s",antenna_bands[i].name,(favorites & (1u<<i)) ? " *" : "");
@@ -215,7 +216,8 @@ static void draw_strip(void) {
   label(antenna_bands[band].name,12,8,2);
   plot_printf(s,sizeof(s),"%u PTS",tuning ? 21 : antenna_points);
   label(s,130,8,2);
-  button((favorites & (1u<<band)) ? "FAV *" : "FAV +",250,0,130,36);
+  button(favorites_only ? "FAV" : "ALL",250,0,85,36);
+  button((favorites & (1u<<band)) ? "*" : "+",335,0,45,36);
   button("VNA",380,0,100,36);
   const char *cal = "UNCALIBRATED";
   if (cal_status & CALSTAT_APPLY) {
@@ -231,12 +233,12 @@ static void draw_strip(void) {
   if (!(config._vna_mode & VNA_MODE_RF_CONFIRMED_MASK)) cal = "CONFIRM HARDWARE MODE";
   label(cal,12,42,1);
   // Small grooved roller and its current left/right function.
-  line(338,46,341,43); line(338,46,341,49);
-  line(344,40,354,40); line(344,52,354,52);
-  line(344,40,344,52); line(354,40,354,52);
-  line(347,42,347,50); line(351,42,351,50);
-  line(360,46,357,43); line(360,46,357,49);
-  label(tuning ? "FREQ +/-" : "BAND FAV",366,42,1);
+  line(390,46,393,43); line(390,46,393,49);
+  line(396,40,406,40); line(396,52,406,52);
+  line(396,40,396,52); line(406,40,406,52);
+  line(399,42,399,50); line(403,42,403,50);
+  line(412,46,409,43); line(412,46,409,49);
+  label(tuning ? "FREQ +/-" : (favorites_only ? "BAND FAV" : "BAND ALL"),418,42,1);
   label(tuning ? "LIVE SWR" : "MIN SWR",12,64,2);
   bool ready = valid && range_matches();
   if (!ready) label("--",12,90,5);
@@ -373,7 +375,7 @@ bool antenna_ui_touch(int x, int y) {
       else if (x >= 360) picker = false;
     }
   } else if (y < 36 && x >= 380) leave();
-  else if (y < 36 && x >= 250) {
+  else if (y < 36 && x >= 335) {
     uint8_t old[3]; memcpy(old,config._reserved,3);
     favorites ^= 1u<<band;
     antenna_favorites_encode(config._reserved,favorites);
@@ -381,6 +383,9 @@ bool antenna_ui_touch(int x, int y) {
       memcpy(config._reserved,old,3); favorites = antenna_favorites_decode(old);
       ui_message_box("Favorites","Save failed",1000);
     }
+  } else if (y < 36 && x >= 250) {
+    favorites_only = !favorites_only;
+    group = favorites_only ? 2 : 0; page = 0;
   } else if (y >= 276) {
     if (x < 120) { picker = true; page = 0; }
     else if (x < 240) {
@@ -406,11 +411,11 @@ bool antenna_ui_lever(uint16_t status) {
   if (status & EVT_BUTTON_SINGLE_CLICK) { picker = !picker; page = 0; }
   else if (tuning && !picker && (status & (EVT_UP|EVT_DOWN))) tune_step((status & EVT_UP) != 0);
   else if (status & (EVT_UP|EVT_DOWN)) {
-    // Outside TUNE, rotation selects favorites, including from the picker.
+    // Outside TUNE, rotation follows the ALL/FAV selection.
     unsigned next = band;
     for (unsigned i = 0; i < ANTENNA_BAND_COUNT; ++i) {
       next = (next + ((status & EVT_UP) ? 1 : ANTENNA_BAND_COUNT-1)) % ANTENNA_BAND_COUNT;
-      if (favorites & (1u<<next)) {
+      if (!favorites_only || (favorites & (1u<<next))) {
         if (next != band || tuning || picker) {
           band = next; picker = tuning = false; apply_range();
         }

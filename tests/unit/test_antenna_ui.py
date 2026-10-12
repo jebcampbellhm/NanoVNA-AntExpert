@@ -219,11 +219,17 @@ int main(void) {
   antenna_ui_touch(180,295); assert(sweep_mode&SWEEP_ENABLE);
   assert(updates==pause_updates); // Resume keeps the completed trace/range.
   uint32_t before=antenna_favorites_decode(config._reserved);
-  antenna_ui_touch(280,10); assert(writes==2);
+  antenna_ui_touch(350,10); assert(writes==2);
   assert(antenna_favorites_decode(config._reserved)==(before^(1u<<5)));
-  fail_save=true; antenna_ui_touch(280,10); assert(messages==1);
+  fail_save=true; antenna_ui_touch(350,10); assert(messages==1);
   assert(antenna_favorites_decode(config._reserved)==(before^(1u<<5)));
   fail_save=false;
+  unsigned filter_writes=writes;
+  antenna_ui_touch(280,10); preview("all-bands");
+  antenna_ui_lever(EVT_UP); assert(frequency0==18068000); // Next band, not next favorite.
+  antenna_ui_lever(EVT_DOWN); assert(frequency0==14000000);
+  antenna_ui_touch(280,10); preview("favorites-only");
+  assert(writes==filter_writes); // Filtering doesn't change saved favorites.
   antenna_ui_touch(260,295);
   assert(frequency0==frequency1 && sweep_points==21);
   uint32_t cw=frequency0; sample(); preview("tune");
@@ -352,6 +358,10 @@ int main(void) {
   antenna_ui_enter(0); uint32_t unchanged=frequency0; saved_writes=writes;
   antenna_ui_lever(EVT_UP); antenna_ui_lever(EVT_DOWN);
   assert(frequency0==unchanged && writes==saved_writes);
+  antenna_ui_touch(280,10); antenna_ui_lever(EVT_UP);
+  assert(frequency0!=unchanged && writes==saved_writes); // ALL works with no favorites.
+  antenna_ui_lever(EVT_DOWN); assert(frequency0==unchanged);
+  antenna_ui_touch(280,10);
   antenna_ui_touch(400,10);
   antenna_favorites_encode(config._reserved,1u<<3);
   antenna_ui_enter(0); antenna_ui_lever(EVT_UP); assert(frequency0==7000000);
