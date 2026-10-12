@@ -30,6 +30,7 @@ HEADER = r'''
 #define LCD_FG_COLOR 1
 #define LCD_BG_COLOR 0
 #define LCD_TRACE_1_COLOR 2
+#define LCD_TRACE_5_COLOR 3
 #define UI_NORMAL 0
 #define UI_MENU 1
 #define EVT_BUTTON_SINGLE_CLICK 1
@@ -152,7 +153,7 @@ static void preview(const char *name) {
   char path[1024]; snprintf(path,sizeof(path),"%s/%s.ppm",dir,name);
   FILE *f=fopen(path,"wb"); assert(f); fprintf(f,"P6\n480 320\n255\n");
   for(unsigned y=0;y<320;y++) for(unsigned x=0;x<480;x++) {
-    const uint8_t rgb[3]={pixels[y][x]?240:10,pixels[y][x]?240:14,pixels[y][x]==1?240:20};
+    const uint8_t rgb[3]={pixels[y][x]?240:10,pixels[y][x]==3?40:(pixels[y][x]?240:14),pixels[y][x]==1?240:20};
     fwrite(rgb,1,3,f);
   }
   fclose(f);
@@ -170,6 +171,11 @@ int main(void) {
   assert(frequency0==14000000 && frequency1==14350000 && sweep_points==101);
   assert(current_props._portz==50 && !(props_mode&DOMAIN_MODE) && sweep_mode==1);
   preview("waiting"); sample(); preview("sweep");
+  // 20 m Extra CW/data ends at 14.150 MHz, 181 pixels into this 350 kHz span.
+  for(unsigned y=264;y<269;y++) {
+    assert(pixels[y][41]==0 && pixels[y][42]==3);
+    assert(pixels[y][223]==3 && pixels[y][224]==0 && pixels[y][466]==0);
+  }
   // A repeated frame must replace complete strips, without clearing the LCD,
   // changing pixels, or using a second framebuffer in firmware.
   uint8_t previous[320][480]; memcpy(previous,pixels,sizeof(pixels));
@@ -187,6 +193,7 @@ int main(void) {
   antenna_ui_touch(260,295);
   assert(frequency0==frequency1 && sweep_points==21);
   uint32_t cw=frequency0; sample(); preview("tune");
+  assert(pixels[266][42]==0); // No band rail in fixed-frequency tuning.
   antenna_ui_touch(400,200); assert(frequency0>cw && frequency0==frequency1);
   antenna_ui_lever(EVT_DOWN); assert(frequency0==cw);
   for(unsigned i=0;i<300;i++) antenna_ui_lever(EVT_UP);
@@ -219,6 +226,7 @@ int main(void) {
   antenna_ui_touch(20,150);
   assert(frequency0==5330600 && frequency1==5406400);
   preview("60m-channels");
+  assert(pixels[266][42]==0); // Channel guides remain separate from HF regions.
   for(unsigned i=0;i<ANTENNA_60M_CHANNELS;i++) {
     unsigned x=42+(uint64_t)(antenna_60m_centers[i]-frequency0)*424/(frequency1-frequency0);
     assert(pixels[190][x]==1 && pixels[191][x]==1 && pixels[192][x]==0);
@@ -236,6 +244,13 @@ int main(void) {
       if(!g && p==1 && j>=5) { antenna_ui_touch(400,295); continue; }
       for(unsigned i=0;i<sweep_points;i++) measured[0][i][0]=1;
       antenna_ui_measurement(); assert(antenna_ui_draw());
+      unsigned band_index=(g?ANTENNA_HF_COUNT:0)+p*6+j;
+      if(band_index==4) {
+        assert(pixels[266][42]==3 && pixels[266][466]==3);
+        assert(pixels[266][467]==0); // All of 30 m is CW/data in the chart.
+        preview("30m-bandplan");
+      }
+      if(band_index==1) preview("80m-bandplan");
     }
   puts("antenna UI transitions, persistence, bounds and rendering passed");
 }

@@ -213,6 +213,15 @@ static void draw_strip(void) {
     ink = GET_PALTETTE_COLOR(LCD_FG_COLOR);
     plot_printf(s,sizeof(s),"%.4f",(double)expected_start/1000000.0); label(s,42,250,1);
     plot_printf(s,sizeof(s),"%.4f MHz",(double)expected_stop/1000000.0); label(s,363,250,1);
+    // A separate rail below the axis leaves the SWR trace and channel guides
+    // unobscured. These are the red CW/RTTY/data regions in the Extra row.
+    const antenna_band_t *b = &antenna_bands[band];
+    if (b->cw_data_stop) {
+      int end = 42 + (uint64_t)(b->cw_data_stop-b->start)*424/(b->stop-b->start);
+      ink = GET_PALTETTE_COLOR(LCD_TRACE_5_COLOR);
+      for (int y = 264; y < 269; ++y) line(42,y,end,y);
+      ink = GET_PALTETTE_COLOR(LCD_FG_COLOR);
+    }
     if (ready && result.bandwidth_valid) {
       float width = (result.high_index-result.low_index) *
                     ((float)(expected_stop-expected_start)/(count-1))/1000;

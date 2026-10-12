@@ -37,6 +37,13 @@ clamp to the start instead of wrapping to the end.
 SWR is referenced to 50 ohms. The graph spans SWR 1 through 5; larger values
 clip at the top. The numeric readout displays 99.9+ above its readable range.
 Invalid samples are omitted rather than presented as an excellent match.
+On 80/75, 40, 30, 20, 17, 15, 12, and 10 m, a thin red bar below the frequency
+axis marks the supplied chart's Extra-class CW/RTTY/data region. It runs from
+the band start to 3.600, 7.125, 10.150, 14.150, 18.110, 21.200, 24.930, or
+28.300 MHz respectively. The bar uses the stored-trace-A palette color (red
+by default), has no text, and does not obscure the SWR trace. It spans all of
+30 m. It is hidden in TUNE; no separate region is inferred for the other
+presets or from the chart's VHF/UHF operating recommendations.
 MIN SWR means the lowest sampled SWR, not necessarily resonance (zero reactance).
 The 2:1 width is the contiguous dip containing that minimum, with linear
 interpolation between samples at its boundaries. `>=` and `(edge)` indicate

@@ -39,12 +39,21 @@ int main(void) {
   assert(!antenna_analyze(invalid,2).valid);
   assert(!antenna_analyze(edge,1).bandwidth_valid);
   uint8_t bytes[3] = {0};
+  const uint32_t cw_data_ends[ANTENNA_BAND_COUNT] = {
+    0,3600000,0,7125000,10150000,14150000,18110000,21200000,
+    24930000,28300000,0,0,0,0,0,0
+  };
   assert(antenna_favorites_decode(bytes) != 0);
   for (unsigned i=0; i<ANTENNA_BAND_COUNT; ++i) {
     antenna_favorites_encode(bytes,1u<<i);
     assert(antenna_favorites_decode(bytes) == (1u<<i));
     assert(antenna_bands[i].start < antenna_bands[i].stop);
     assert(antenna_bands[i].stop <= 1300000000);
+    assert(antenna_bands[i].cw_data_stop == cw_data_ends[i]);
+    if (cw_data_ends[i]) {
+      assert(cw_data_ends[i] > antenna_bands[i].start);
+      assert(cw_data_ends[i] <= antenna_bands[i].stop);
+    }
   }
   antenna_favorites_encode(bytes,0);
   assert(antenna_favorites_decode(bytes) == 0); // Empty is distinct from uninitialized.
