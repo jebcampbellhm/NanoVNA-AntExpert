@@ -142,10 +142,12 @@ static void draw_picker(void) {
     plot_printf(s,sizeof(s),"%s%s",antenna_bands[i].name,(favorites & (1u<<i)) ? " *" : "");
     int x = (j%2)*240, y = 88+(j/2)*58;
     button("",x,y,240,54);
-    label(s,x+8,y+3,2);
+    label(s,x+8,y+16,2);
     uint32_t mhz = ((uint64_t)antenna_bands[i].start+antenna_bands[i].stop+1000000)/2000000;
-    plot_printf(s,sizeof(s),"~%u MHz",mhz);
-    label(s,x+8,y+28,2);
+    plot_printf(s,sizeof(s),"%u MHz",mhz);
+    unsigned width = 0;
+    for (const char *p = s; *p; ++p) width += FONT_GET_WIDTH((uint8_t)*p)*2;
+    label(s,x+232-width,y+16,2);
   }
   button("PREV",0,276,120,44); button("NEXT",120,276,120,44);
   plot_printf(s,sizeof(s),"%u/%u",page+1,n ? (n+5)/6 : 1);

@@ -14,7 +14,8 @@ clamp to the start instead of wrapping to the end.
 ## Use
 
 - **BANDS:** choose HF+6, V/UHF, or FAV. PREV/NEXT page through six large tiles.
-  Each tile shows wavelength and an approximate center frequency rounded to MHz.
+  Each tile shows wavelength on the left and center frequency rounded to MHz
+  on the right, using the same large font and no approximation prefix.
   A single 60 m tile covers all five channels, with numbered center guides on
   the sweep graph. The sweep also measures the gaps between channels.
 - **FAV + / FAV \*:** toggle and immediately save the current preset as a favorite.
@@ -119,7 +120,7 @@ bytes. H size is unchanged. H4 has no warnings; H retains the existing toolchain
 warnings. The follow-up H4 binary SHA-256 is
 `4b27483aa3bdc9ffc71e746e86faec6085f87b36244bde469325aebb0045be5d`.
 
-Combined 60 m and two-line band-tile validation: all 14 C suites and six Python
+Combined 60 m and initial two-line band-tile validation: all 14 C suites and six Python
 harnesses pass normally and with ASan/UBSan, including all 20 legacy favorite
 bits and the five channel-guide positions. Rendered HF/VHF tiles and the 60 m
 graph were visually checked. Clean WSL H4 and H builds pass; H4 text is 116,104,
