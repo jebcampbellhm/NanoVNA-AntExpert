@@ -36,7 +36,8 @@ uses the production help panel with a host-rendered menu outline.*
    From MULTI, tap a band card first, then **VNA** on its detail screen.
 3. **Your interface choice is saved between boots:** power off in ANT and it
    starts in ANT; switch to VNA and the next boot starts in VNA. This remembers
-   the interface, not the last ANT band or MULTI page: ANT starts at 20 m/101 points.
+   the interface and the last ANT band sweep or MULTI HF screen. Measurements
+   start fresh; traces are not saved. Single-band sweeps start at 101 points.
 
 | Normal VNA: open the main menu, then ANTENNA | ANT: tap VNA at the upper right |
 | --- | --- |
@@ -56,11 +57,14 @@ Extra-class bandplan described in the [operating guide](doc/antenna_expert.md).
   Div, Multi and ZeeTK, with an explicit **SAVE CONFIG** action.
 - **Two protected ANT calibration slots:** HF ANT and V/U ANT, each with **401
   calibration points distributed among its amateur bands**, rather than evenly
-  across a wide span. OPEN, SHORT and LOAD can capture both profiles at each step.
+  across a wide span. HF calibration spacing is at most **10 kHz within each band**.
+  OPEN, SHORT and LOAD can capture both profiles at each step. Upgrading from
+  the original ANT grid requires recalibration of both profiles. **Clear Config**
+  erases both ANT slots along with the other saved settings and calibrations.
 - **Single-band SWR:** large minimum-SWR and frequency readouts, 2:1 and 3:1
   guides, bandwidth indication and 101/201/401 measurement-point selection.
 - **TUNE:** live SWR at a selected frequency, adjusted with the roller or touch
-  buttons. Favorites and the ANT/VNA startup mode are saved.
+  buttons. Favorites, the ANT/VNA startup mode and the last ANT band/MULTI screen are saved.
 - **MULTI HF:** eight cached mini plots for 80, 40, 30, 20, 17, 15, 12 and 10 m,
   each with minimum/maximum SWR. Tap a card for detail and **MULTI** to return.
 - **Bandplan cues:** combined 60 m channel view, CW/data rails in band sweeps,
@@ -106,7 +110,7 @@ address and verification instructions. No SD card is involved.
 | Target | Scope in this fork |
 | --- | --- |
 | NanoVNA-H4 / STM32F303 | Antenna UI and hardware-mode guidance. Development and hands-on testing have used a ZeeTK H4 rev4.4. |
-| NanoVNA-H / STM32F072 | Legacy build retained for shared-code regression checks only. **Not supported for AntExpert; no ANT screens.** |
+| NanoVNA-H / STM32F072 | Automatic builds disabled; upstream source retained. **Not supported for AntExpert; no ANT screens.** |
 
 Select the RF mode from actual component markings; there is no reliable automatic
 ZeeTK revision detection. Support for presets through 23 cm does not imply equal
@@ -127,12 +131,12 @@ on other hardware revisions remain work in progress.
 git clone --branch antenna_expert https://github.com/jebcampbellhm/NanoVNA-AntExpert.git
 cd NanoVNA-AntExpert
 make test
-make TARGET=F303 -j$(nproc)
+make TARGET=F303 USE_LTO=yes -j$(nproc)
 ```
 
 Use an Arm GNU toolchain and Ubuntu/WSL; development builds currently use Arm GCC
-14.2.1. For the smaller H, clean between targets and use
-`make TARGET=F072 USE_LTO=yes -j$(nproc)`. The H4 code partition is almost full;
+14.2.1. The default target, GitHub CI and release builds are **H4/F303 only**.
+The H4 code partition is almost full;
 the linker must continue to protect saved calibration storage. Detailed
 prerequisites and USB DFU instructions are in [the build guide](doc/building.md).
 Firmware is flashed over USB DFU, not by putting a `.dfu` file on an SD card.

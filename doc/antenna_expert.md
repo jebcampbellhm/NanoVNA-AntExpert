@@ -25,8 +25,17 @@ card to open that screen first.
 ![ANT single-band screen: VNA returns to the standard interface](images/antenna-expert/ant-return.png)
 
 These two images are actual USB screen captures from the development H4. ANT/VNA
-selection is saved automatically across power cycles. ANT restarts on 20 m at
-101 points; the last band, TUNE/MULTI page and overview contents are not restored.
+selection and the last ANT band sweep or MULTI HF screen are saved automatically
+across power cycles. The screen opens with fresh measurements, not a saved trace.
+Single-band sweeps restart with 101 points; MULTI scans its eight bands anew.
+TUNE returns to its band's sweep; band pickers and calibration walkthroughs are
+not resumed. A fresh or older configuration without a saved screen starts at 20 m.
+
+Screen changes save settings only when the selected band or view changes;
+measurements and automatic MULTI scanning do not write flash. Existing favorites
+and calibration slots are preserved. Older firmware does not understand this new
+screen/favorites encoding and may return to its default favorites and startup mode
+if you downgrade.
 
 ## 1. Select hardware on first use
 
@@ -69,6 +78,32 @@ It is not 401 points per band and not one uniformly spaced sweep through the gap
 | HF ANT | 5 | 160, 80/75, 60, 40, 30, 20, 17, 15, 12 and 10 m |
 | V/U ANT | 6 | 6 m, 2 m, 1.25 m, 70 cm, 33 cm and 23 cm |
 
+HF uses **10 kHz maximum calibration spacing within each band**, including both
+endpoints. The 401 points are allocated as follows:
+
+| Band | Calibration points | Spacing |
+| --- | ---: | ---: |
+| 160 m | 21 | 10 kHz |
+| 80/75 m | 51 | 10 kHz |
+| 60 m | 9 | 9.475 kHz |
+| 40 m | 31 | 10 kHz |
+| 30 m | 6 | 10 kHz |
+| 20 m | 36 | 10 kHz |
+| 17 m | 11 | 10 kHz |
+| 15 m | 46 | 10 kHz |
+| 12 m | 11 | 10 kHz |
+| 10 m | 179 | About 9.55 kHz |
+
+The VHF/UHF profile retains its wider spacing; the 10 kHz limit applies only to
+HF band segments. This is calibration spacing, independent of the screen's
+measurement point count.
+
+**Recalibrate after upgrading from the original development grid.** This revision
+keeps the ANT1 format and does not automatically reject existing profiles. Set
+**both profiles to CAPTURE** and repeat OPEN, SHORT and LOAD before relying on
+readings: existing HF coefficients belong to different frequencies. Normal VNA
+calibration slots are unaffected.
+
 The displayed slot numbers are the firmware's IDs; normal calibration slots
 0–4 remain available. Ordinary calibration saves and USB save commands cannot
 write slots 5/6. The ANT walkthrough is their write path.
@@ -101,8 +136,10 @@ message rather than assuming any arbitrary VNA range is covered.
 
 Cancel before SAVE leaves stored profiles unchanged. Saving the two profiles is
 not an atomic pair: interrupted power during SAVE may leave only one updated.
-Retry a reported save failure. **Clear Config preserves ANT calibration slots**;
-it does not count as recalibration. ANT profiles include RF compatibility
+Retry a reported save failure. **Clear Config erases settings and all calibration
+slots, including HF ANT and V/U ANT.** After reset, select and save the hardware
+mode again, then run the ANT calibration walkthrough; both empty profiles are
+automatically included. ANT profiles include RF compatibility
 metadata, and incompatible profiles must be captured again.
 
 ## 3. Sweep one band
@@ -131,8 +168,8 @@ The combined 60 m tile shows the five channel centers on one plot.
 - **MULTI**, beside the frequency on an HF band sweep, returns directly to the
   eight-band overview. It is not shown in TUNE or on VHF/UHF band sweeps.
 - **VNA** returns to the previous ordinary VNA view. Entering/leaving ANT saves
-  which interface should open on the next boot; the chosen band and overview
-  are not persisted. ANT starts at 20 m with 101 measurement points.
+  which interface should open on the next boot. Returning to ANT restores the
+  last band sweep or MULTI HF screen and takes fresh measurements.
 
 ## 4. Tune at one frequency
 

@@ -52,7 +52,9 @@ clamp to the start instead of wrapping to the end.
   with VNA saves VNA. Mode restoration runs after normal UI/plot initialization
   and does not write flash. Like favorites, mode changes save the whole device
   configuration. A failed save reports an error and retains the previous saved
-  startup choice. Only the view is remembered; Antenna starts at 20 m after boot.
+  startup choice. The last band sweep or MULTI HF view is restored with fresh
+  measurements. TUNE restarts as its band sweep; calibration/picker pages do not
+  resume. Single-band startup uses 101 points; no saved view defaults to 20 m.
 
 SWR is referenced to 50 ohms. The graph spans SWR 1 through 5; larger values
 clip at the top. The numeric readout displays 99.9+ above its readable range.
@@ -88,16 +90,19 @@ transmission authorization or a license-class filter; the continuous measurement
 span includes gaps between the channel windows. Upper-frequency presets do not
 imply uniform measurement accuracy.
 
-Favorites use the three existing reserved configuration bytes: 20 legacy band
-bits and a high nibble of `0xA` for VNA startup or `0xB` for Antenna startup.
-Existing `0xA` favorites remain valid and default to VNA startup. The 16 visible presets are mapped onto
-those original bit positions. Any saved 60 m channel favorite selects the combined
-60 m entry; saving it sets all five old channel bits. Older antenna prototypes
-that only recognize `0xA` will fall back to default favorites for `0xB` records.
-No configuration size or calibration-slot layout
-changes. Uninitialized/cleared configuration defaults to 40 m, 20 m, 6 m, 2 m,
-and 70 cm; an explicitly empty list stays empty. Cleared or unrecognized settings
-start in VNA. The legacy bit mapping is part of the storage format.
+Favorites and the startup view use the three existing reserved configuration
+bytes. The current format has 16 direct favorite bits, five view bits (0..15 for
+bands, 16 for MULTI), one ANT/VNA bit and a two-bit `11` tag. Invalid view codes,
+including erased `0xff` bytes, fall back to defaults. Legacy `0xA`/`0xB` records
+are read and migrated when settings change, preserving favorites and startup
+mode; any old 60 m channel favorite maps to the combined entry. Older firmware
+cannot read the new encoding and falls back to its default favorites/mode.
+No configuration size or calibration-slot layout changes. Uninitialized/cleared
+configuration defaults to favorites 40 m, 20 m, 6 m, 2 m and 70 cm; an explicitly
+empty list stays empty. Cleared or unrecognized settings start in VNA.
+Only user changes of band/view or mode save configuration. Boot restoration,
+TUNE frequency steps and automatic MULTI scanning do not save measurements or
+write configuration. A failed write restores the prior encoded settings.
 
 The H4's CPU-only sweep cache occupies 1,604 bytes of CCM alongside the existing
 measurement buffer. It is written completely before use, does not use DMA, and
@@ -262,9 +267,11 @@ comparison sweeps on hardware. No calibration accuracy is established by host te
 The current implementation uses two internal profiles rather than an SD container.
 Slot 5 is HF ANT (160m through 10m); slot 6 is V/U ANT (6m, 2m, 1.25m, 70cm,
 33cm and 23cm). Each has 401 total points on an immutable, versioned grid. Counts
-by band are 40/50/21/50/25/50/30/45/25/65 for HF and 61/91/41/101/46/61 for V/U.
+by band are 21/51/9/31/6/36/11/46/11/179 for HF and 61/91/41/101/46/61 for V/U.
 The existing property record size and slot addresses are unchanged. A distinct
 ANT1 magic prevents old firmware from interpreting these as uniform calibrations.
+This development-grid revision retains ANT1 by request; existing HF profiles must
+be recalibrated manually because their frequency allocation has changed.
 Correction covers the band segments only; gaps and frequencies outside the profile
 use identity correction. It is not a continuous broadband calibration. Coefficients
 are never blended across a harmonic-mode boundary. RF mode, oscillator frequency,
@@ -285,10 +292,10 @@ are individually verified, not a power-loss-atomic pair: interruption during SAV
 can leave one updated slot and one previous/invalid slot. Retry a reported save
 failure before leaving; incomplete records are rejected by checksum. Captures
 do not resume across power cycles. Legacy SD `.cal` import does not yet restore
-ANT1 profiles; use an entire flash backup until a versioned export/import is added.
+ANT profiles; use an entire flash backup until a versioned export/import is added.
 
 Normal SAVE CAL offers only slots 0–4. Ordinary saves, USB save commands and
-autosave cannot write slots 5/6; Clear Config preserves those ANT slots. Native
+autosave cannot write slots 5/6; Clear Config erases every calibration slot, including both ANT profiles. Native
 H/F072 retains its ordinary slot behavior. Full hardware validation remains
 necessary, especially at 33cm/23cm and across harmonic transitions.
 
@@ -299,7 +306,7 @@ initialization and disables applied sweep correction. It does not erase settings
 or saved calibration. Save failure does not set confirmation, and RTC backup cannot
 override it. Selecting another mode clears confirmation and active calibration;
 recalibrate after changing hardware mode. Existing legacy calibrations do not have
-the RF compatibility metadata of ANT1 and should only be recalled deliberately
+the RF compatibility metadata of ANT profiles and should only be recalled deliberately
 when the hardware/settings are known to match.
 
 Validation: all 14 C suites and ten Python checks passed normally and with
@@ -330,7 +337,7 @@ and add ! beside the extrema. CAL/UNCAL describes each cached measurement.
 PAUSE/RUN holds or resumes scanning. Tap a card to open its ordinary ANT view
 at the selected single-band point count (101 by default). Roller rotation
 selects a card; pressing opens it. BANDS returns to the picker. Re-entering
-MULTI HF starts a fresh overview; startup still restores ANT's single-band view.
+MULTI HF starts a fresh overview; startup now restores the saved band/MULTI view.
 The overview is a fixed initial HF selection and does not alter saved favorites.
 
 The cache shares the existing 401-float CCM allocation with the single-band

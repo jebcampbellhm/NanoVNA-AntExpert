@@ -184,6 +184,22 @@ int main(void) {
       assert((j==i && k==0) || (j+1==i && k==1));
     }
   }
+  // HF coverage includes every endpoint with no interval above 10 kHz.
+  const uint32_t hf[][2]={{1800000,2000000},{3500000,4000000},{5330600,5406400},
+    {7000000,7300000},{10100000,10150000},{14000000,14350000},{18068000,18168000},
+    {21000000,21450000},{24890000,24990000},{28000000,29700000}};
+  unsigned point=0;
+  for(unsigned band=0;band<10;band++) {
+    uint32_t previous=antenna_cal_frequency(0,point++);
+    assert(previous==hf[band][0]);
+    while(previous<hf[band][1]) {
+      assert(point<ANT_CAL_POINTS);
+      uint32_t f=antenna_cal_frequency(0,point++);
+      assert(f>previous && f-previous<=10000 && f<=hf[band][1]);
+      previous=f;
+    }
+  }
+  assert(point==ANT_CAL_POINTS);
   unsigned j; float k;
   assert(!antenna_cal_bracket(0,5000000,&j,&k));
   assert(!antenna_cal_range(1,148000000,222000000));
@@ -225,8 +241,21 @@ int main(void) {
   assert(antenna_cal_step());
   assert(!memcmp(saved+16384,(void *)0x08034800,16384));
   memcpy(saved,(void *)0x08030800,32768);
+  *(uint8_t *)(uintptr_t)(SAVE_PROP_CONFIG_ADDR-1)=0x5a;
+  *(uint8_t *)(uintptr_t)(SAVE_PROP_CONFIG_ADDR+SAVE_FULL_AREA_SIZE)=0xa5;
   clear_all_config_prop_data();
-  assert(!memcmp(saved,(void *)0x08030800,32768)); // Clear Config preserves ANT.
+  for(unsigned i=0;i<SAVE_FULL_AREA_SIZE;i++)
+    assert(((const uint8_t *)(uintptr_t)SAVE_PROP_CONFIG_ADDR)[i]==255);
+  assert(*(uint8_t *)(uintptr_t)(SAVE_PROP_CONFIG_ADDR-1)==0x5a);
+  assert(*(uint8_t *)(uintptr_t)(SAVE_PROP_CONFIG_ADDR+SAVE_FULL_AREA_SIZE)==0xa5);
+  for(unsigned slot=0;slot<SAVEAREA_MAX;slot++) assert(!get_properties(slot));
+  assert(!antenna_cal_saved(0) && !antenna_cal_saved(1));
+  assert(!antenna_cal_load(0) && !antenna_cal_load(1));
+  memset(capture,0,sizeof capture);
+  assert(antenna_cal_begin(1)); finish_capture();
+  assert(capture[0]==3 && capture[1]==3 && capture[2]==3);
+  assert(antenna_cal_step());
+  assert(antenna_cal_saved(0) && antenna_cal_saved(1));
   assert(antenna_cal_load(0));
   config._band_mode=0;
   assert(!antenna_cal_saved(0) && !antenna_cal_load(0) && !(cal_status&CALSTAT_APPLY));

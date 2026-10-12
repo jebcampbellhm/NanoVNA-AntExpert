@@ -23,6 +23,10 @@
 #include <string.h>
 #include <math.h>
 #include "nanovna.h"
+#ifdef NANOVNA_F303
+// Favor size for UI control; RF timing code keeps its own optimization.
+#pragma GCC optimize("Os")
+#endif
 #include "ui/core/ui_core.h"
 #include "ui/core/ui_menu_engine.h" // For ui_draw_button
 #include "ui/core/ui_keypad.h" // For ui_keypad_lever

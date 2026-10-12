@@ -238,13 +238,8 @@ static void clear_all_config_prop_data_impl(void) {
   lastsaveid = NO_SAVE_SLOT;
   checksum_ok = 0;
   // unlock and erase flash pages
-#ifdef NANOVNA_F303
-  // ANT profiles are replaced only by the antenna walkthrough.
-  flash_erase_pages(SAVE_PROP_CONFIG_ADDR, ANT_CAL_FIRST_SLOT * SAVE_PROP_CONFIG_SIZE);
-  flash_erase_pages(SAVE_CONFIG_ADDR, SAVE_CONFIG_SIZE);
-#else
+  // Clear Config resets all saved calibration slots, including both ANT profiles.
   flash_erase_pages(SAVE_PROP_CONFIG_ADDR, SAVE_FULL_AREA_SIZE);
-#endif
   
   // Release the semaphore
   chSemSignal(&flash_operation_semaphore);

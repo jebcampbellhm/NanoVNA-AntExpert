@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [ F072, F303 ]
+        target: [ F303 ]
 
     env:
       TARGET: ${{ matrix.target }}

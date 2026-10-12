@@ -12,11 +12,10 @@ ifeq ($(filter -j%,$(MAKEFLAGS)),)
   endif
 endif
 
-#Build target
+# AntExpert defaults to H4; CI and release workflows build only this target.
 ifeq ($(TARGET),)
-  TARGET = F072
+  TARGET = F303
 endif
-#TARGET=F303
 
 # Compiler options here.
 ifeq ($(USE_OPT),)

@@ -466,11 +466,7 @@ const menuitem_t menu_connection[] = {
 #endif
 
 const menuitem_t menu_clear[] = {
-#ifdef NANOVNA_F303
-    {MT_CALLBACK, MENU_CONFIG_RESET, "RESET\nKEEP ANT CAL", menu_config_cb},
-#else
     {MT_CALLBACK, MENU_CONFIG_RESET, "CLEAR ALL\nAND RESET", menu_config_cb},
-#endif
     {MT_NEXT, 0, NULL, menu_back} // next-> menu_back
 };
 

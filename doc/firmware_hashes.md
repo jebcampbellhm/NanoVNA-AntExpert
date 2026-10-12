@@ -1,4 +1,25 @@
-# Firmware comparison — 2026-10-12
+# Firmware verification — 2026-10-12
+
+## Current development H4
+
+The screen-restoration, 10 kHz HF calibration-grid and full-reset update was
+built in WSL with Arm GCC 14.2.1 and flashed with programmer verification. The
+final menu-label build was reported working on the development ZeeTK H4.
+
+- H4.bin: 116,700 bytes; SHA-256
+  `6ed13a56c5cee300cf8aae6c56172dc33ef6d4024e07a9a92c2defebe488f010`.
+- H4.dfu: SHA-256
+  `60b454181427a3f4d79fa029e3b97b0f0fc0e68b38044bcea1705d76d82ab1c8`.
+- All 145,408 bytes at and above `0x0801C800` matched the pre-flash backup
+  before startup. Flashing preserved storage; explicitly selecting Clear Config
+  now erases configuration and all calibration slots, including ANT.
+- Normal and address/undefined-behavior sanitizer suites passed for the behavior
+  changes. The final label-only rebuild passed and its string was checked in the
+  binary. CI and release workflows now build H4/F303 only.
+
+CI artifacts may differ due to compiler and embedded build-time metadata.
+
+## Initial publication audit (historical)
 
 The initial `antenna_expert` [CI run](https://github.com/jebcampbellhm/NanoVNA-AntExpert/actions/runs/38311608915)
 for commit `78170831143fc5da5348d5c6a66b75ccfff19cdf` succeeded for both targets.
@@ -9,7 +30,7 @@ not an Arm firmware build failure. Workflows now select Node 24 Actions directly
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| Last image flashed and readback-verified on the development H4 | 116576 | `de8ff3ad6aab14ce49722a81d406428c9595a01ecea590631243e62a9b0d78dc` |
+| Image flashed before the initial publication audit | 116576 | `de8ff3ad6aab14ce49722a81d406428c9595a01ecea590631243e62a9b0d78dc` |
 | Later WSL publication-validation rebuild | 116576 | `ac7828e5697b46212017fdf095e13b63ffffae77103b69b788a97fcf150fa1b8` |
 | Initial GitHub CI artifact, F303 / H4.bin | 116124 | `8cc44cf5d8a3b8dca845ea035b422b9e4403b2626e4ca53ff5f9dd7eebbae495` |
 

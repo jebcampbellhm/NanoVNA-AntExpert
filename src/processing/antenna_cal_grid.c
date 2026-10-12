@@ -1,14 +1,16 @@
 #include "processing/antenna_cal_grid.h"
 #pragma GCC optimize("Os")
 
-/* Immutable ANT1 grid. Changing these ranges/counts requires a new magic/version.
+/* ANT1 development grid: existing HF profiles require manual recalibration
+ * after this allocation change. Future published grid changes need versioning.
+ * HF spacing is at most 10 kHz; the eight surplus points go to 10 m.
  * Each band includes its endpoints. Gaps are deliberately not calibrated. */
 typedef struct { uint32_t start, stop; uint16_t count; } segment_t;
 static const segment_t grid[] = {
-  {1800000,2000000,40}, {3500000,4000000,50}, {5330600,5406400,21},
-  {7000000,7300000,50}, {10100000,10150000,25}, {14000000,14350000,50},
-  {18068000,18168000,30}, {21000000,21450000,45}, {24890000,24990000,25},
-  {28000000,29700000,65},
+  {1800000,2000000,21}, {3500000,4000000,51}, {5330600,5406400,9},
+  {7000000,7300000,31}, {10100000,10150000,6}, {14000000,14350000,36},
+  {18068000,18168000,11}, {21000000,21450000,46}, {24890000,24990000,11},
+  {28000000,29700000,179},
   {50000000,54000000,61}, {144000000,148000000,91}, {222000000,225000000,41},
   {420000000,450000000,101}, {902000000,928000000,46}, {1240000000,1300000000,61}
 };

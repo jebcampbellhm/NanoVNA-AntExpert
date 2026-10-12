@@ -239,7 +239,7 @@ int main(void) {
   antenna_ui_lever(EVT_UP); assert(frequency0==18068000); // Next band, not next favorite.
   antenna_ui_lever(EVT_DOWN); assert(frequency0==14000000);
   antenna_ui_touch(280,10); preview("favorites-only");
-  assert(writes==filter_writes); // Filtering doesn't change saved favorites.
+  assert(writes==filter_writes+2); // Only the two band changes write, not filtering.
   antenna_ui_touch(260,295);
   assert(frequency0==frequency1 && sweep_points==21);
   uint32_t cw=frequency0; sample(); preview("tune");
@@ -344,7 +344,7 @@ int main(void) {
   antenna_ui_lever(EVT_UP); assert(frequency0==tune_before+1500 && frequency0==frequency1 && sweep_points==21);
   antenna_ui_touch(180,295); assert(frequency0==7000000 && frequency1==7300000 && sweep_points==401);
   antenna_ui_lever(EVT_UP); assert(frequency0==14000000 && sweep_points==401);
-  assert(writes==saved_writes); // No flash writes for rotation or TUNE.
+  assert(writes==saved_writes+6); // Six band changes; TUNE frequency changes do not write.
 
   // Simulate loading persisted configuration after a power cycle. Restoration
   // re-enters Antenna without writing flash; VNA stays VNA after leaving it.
@@ -373,7 +373,7 @@ int main(void) {
   antenna_ui_lever(EVT_UP); antenna_ui_lever(EVT_DOWN);
   assert(frequency0==unchanged && writes==saved_writes);
   antenna_ui_touch(280,10); antenna_ui_lever(EVT_UP);
-  assert(frequency0!=unchanged && writes==saved_writes); // ALL works with no favorites.
+  assert(frequency0!=unchanged && writes==saved_writes+1); // ALL works with no favorites.
   antenna_ui_lever(EVT_DOWN); assert(frequency0==unchanged);
   antenna_ui_touch(280,10);
   antenna_ui_touch(400,10);
@@ -387,6 +387,7 @@ int main(void) {
   antenna_ui_touch(20,295); antenna_ui_touch(20,15);
   assert(frequency0==3500000 && sweep_points==51);
   preview("multi-waiting");
+  unsigned multi_writes=writes;
   const unsigned bands[]={1,3,4,5,6,7,8,9};
   for(unsigned k=0;k<8;k++) {
     assert(frequency0==antenna_bands[bands[k]].start);
@@ -414,6 +415,7 @@ int main(void) {
     if(k<7) antenna_ui_prepare_sweep();
   }
   preview("multi-eight");
+  assert(writes==multi_writes); // Automatic band scans never persist data or scan position.
   for(unsigned k=0;k<8;k++) {
     const antenna_band_t *b=&antenna_bands[bands[k]];
     unsigned x=(k%4)*120+6+(uint64_t)(b->cw_data_stop-b->start)*106/(b->stop-b->start);
@@ -458,6 +460,30 @@ int main(void) {
   antenna_ui_touch(430,15); // BANDS remains accessible without a bottom menu.
   antenna_ui_touch(400,295); antenna_ui_touch(400,10);
   assert(!antenna_ui_draw());
+  // Restore every saved band independently of the last RAM selection. No old
+  // measurement trace may survive; boot and fresh measurements never save data.
+  for(unsigned v=0;v<=ANTENNA_VIEW_MULTI;v++) {
+    antenna_view_encode(config._reserved,v);
+    antenna_mode_encode(config._reserved,true);
+    unsigned restored_writes=writes;
+    antenna_ui_restore();
+    assert(writes==restored_writes);
+    unsigned b=v==ANTENNA_VIEW_MULTI?1:v;
+    assert(frequency0==antenna_bands[b].start && frequency1==antenna_bands[b].stop);
+    assert(antenna_ui_draw());
+    for(unsigned y=109;y<173;y++) for(unsigned x=42;x<110;x++)
+      assert(pixels[y][x]!=2); // No saved measurement curve.
+    sample(); assert(writes==restored_writes);
+    if(v==ANTENNA_VIEW_MULTI) antenna_ui_touch(60,140);
+    antenna_ui_touch(400,10); assert(!antenna_ui_draw());
+  }
+  // Failed band saves retain the prior startup screen and report the error.
+  antenna_view_encode(config._reserved,5); antenna_ui_enter(0);
+  uint8_t prior_view[3]; memcpy(prior_view,config._reserved,3);
+  fail_save=true; old_messages=messages;
+  antenna_ui_lever(EVT_UP);
+  assert(messages==old_messages+1 && memcmp(prior_view,config._reserved,3)==0);
+  fail_save=false;
   puts("antenna UI transitions, mode persistence, favorites roller, bounds and rendering passed");
 }
 '''

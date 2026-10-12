@@ -107,13 +107,17 @@ static void apply_range(void) {
   app_measurement_update_frequencies();
   redraw();
 }
+static void multi_enter(void);
 static void save_mode(bool enabled) {
-  if (antenna_mode_decode(config._reserved) == enabled) return;
+  unsigned view = multi ? ANTENNA_VIEW_MULTI : band;
+  if (antenna_mode_decode(config._reserved) == enabled &&
+      (!enabled || antenna_view_decode(config._reserved) == view)) return;
   uint8_t old[3]; memcpy(old,config._reserved,3);
   antenna_mode_encode(config._reserved,enabled);
+  if (enabled) antenna_view_encode(config._reserved,view);
   if (config_save() != 0) {
     memcpy(config._reserved,old,3);
-    ui_message_box("Startup mode","Save failed",1000);
+    ui_message_box("Startup view","Save failed",1000);
   }
 }
 void antenna_ui_enter(uint16_t data) {
@@ -124,8 +128,11 @@ void antenna_ui_enter(uint16_t data) {
     saved_sweep = sweep_mode & SWEEP_ENABLE; saved_portz = current_props._portz;
     favorites = antenna_favorites_decode(config._reserved);
   }
+  unsigned view = antenna_view_decode(config._reserved);
   active = true; picker = false; tuning = false; multi = false;
-  ui_mode_normal(); apply_range();
+  ui_mode_normal();
+  if (view == ANTENNA_VIEW_MULTI) multi_enter();
+  else { band = view; apply_range(); }
   save_mode(true);
 }
 void antenna_ui_restore(void) {
@@ -529,6 +536,7 @@ bool antenna_ui_touch(int x, int y) {
   } else if (tuning && y >= 173 && y < 231) {
     if (x < 206) tune_step(false); else if (x >= 274) tune_step(true);
   }
+  if (active && !picker && !cal_page) save_mode(true);
   redraw(); return true;
 }
 bool antenna_ui_lever(uint16_t status) {
@@ -553,6 +561,7 @@ bool antenna_ui_lever(uint16_t status) {
       }
     }
   }
+  if (!picker) save_mode(true);
   redraw(); return true;
 }
 #endif

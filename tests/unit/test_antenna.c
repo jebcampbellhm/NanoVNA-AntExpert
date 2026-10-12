@@ -67,7 +67,7 @@ int main(void) {
     assert(antenna_favorites_decode(bytes)==(1u<<index));
   }
   antenna_favorites_encode(bytes,1u<<ANTENNA_60M_BAND);
-  assert(bytes[0]==0x7c && bytes[1]==0 && bytes[2]==0xa0);
+  assert(bytes[0]==4 && bytes[1]==0 && bytes[2]==0xc5);
   assert(!antenna_mode_decode(bytes)); // Legacy favorites boot into VNA.
   antenna_mode_encode(bytes,true);
   assert(antenna_mode_decode(bytes) && antenna_favorites_decode(bytes)==4);
@@ -87,6 +87,36 @@ int main(void) {
     assert(antenna_60m_centers[i]>antenna_bands[2].start);
     assert(antenna_60m_centers[i]<antenna_bands[2].stop);
     if(i) assert(antenna_60m_centers[i]>antenna_60m_centers[i-1]);
+  }
+  // Every band and MULTI survive encoding, favorites edits, and ANT/VNA changes.
+  for(unsigned view=0;view<=ANTENNA_VIEW_MULTI;++view) {
+    antenna_view_encode(bytes,view);
+    assert(antenna_view_decode(bytes)==view);
+    antenna_favorites_encode(bytes,0xa55a);
+    antenna_mode_encode(bytes,true);
+    assert(antenna_view_decode(bytes)==view && antenna_mode_decode(bytes));
+    antenna_mode_encode(bytes,false);
+    assert(antenna_view_decode(bytes)==view && !antenna_mode_decode(bytes));
+    assert(antenna_favorites_decode(bytes)==0xa55a);
+  }
+  uint8_t previous[3]; memcpy(previous,bytes,3);
+  antenna_view_encode(bytes,17); assert(memcmp(previous,bytes,3)==0);
+  for(unsigned x=0;x<256;++x) {
+    bytes[0]=bytes[1]=0xff;bytes[2]=x;
+    assert(antenna_view_decode(bytes)<=ANTENNA_VIEW_MULTI);
+    if((x&0xc0)==0xc0 && (x&31)>16) {
+      assert(antenna_view_decode(bytes)==5 && !antenna_mode_decode(bytes));
+    }
+  }
+  // Both legacy formats retain their favorites/mode and default to 20 m.
+  for(unsigned mode=0;mode<2;++mode) for(unsigned i=0;i<20;++i) {
+    uint32_t old=1u<<i;bytes[0]=old;bytes[1]=old>>8;
+    bytes[2]=0xa0|(mode?0x10:0)|((old>>16)&15);
+    uint32_t favorites=antenna_favorites_decode(bytes);
+    assert(antenna_view_decode(bytes)==5);
+    antenna_view_encode(bytes,16);
+    assert(antenna_view_decode(bytes)==16 && antenna_mode_decode(bytes)==(mode!=0));
+    assert(antenna_favorites_decode(bytes)==favorites);
   }
   puts("antenna tests passed");
   return 0;
