@@ -5,6 +5,12 @@ required.** Calibration profiles, hardware selection, favorites and ANT/VNA
 startup mode use internal flash. Other NanoVNA models are not supported by the AntExpert UI.
 Start with the [easy button-DFU flashing guide](flashing_h4.md).
 
+**Version 0.1.1** adds the CABLE screen described below. It reuses the 0.1.0 ANT
+calibration profiles without changing their grid or slot format. A normal
+code-only update does not require Clear Config or a new calibration when your
+connections and RF settings match. Earlier development grids are covered by the
+recalibration note in section 2.
+
 These illustrations are generated with the firmware font/rendering code and
 synthetic measurements. They show controls and layout, not expected antenna SWR.
 The hardware help panel is production-rendered; its menu outline is host-rendered.
@@ -21,13 +27,18 @@ continue to use slots 0–4.
 Tap the VNA screen or press the roller, then choose **ANTENNA**. To return, tap
 **VNA** at the upper right of a single-band or TUNE screen. In MULTI, tap a band
 card to open that screen first.
+From CABLE, tap **ANT** to return to the last antenna band, then **VNA**.
 
 ![ANT single-band screen: VNA returns to the standard interface](images/antenna-expert/ant-return.png)
 
 These two images are actual USB screen captures from the development H4. ANT/VNA
-selection and the last ANT band sweep or MULTI HF screen are saved automatically
+selection and the last ANT band sweep, MULTI HF or CABLE screen are saved automatically
 across power cycles. The screen opens with fresh measurements, not a saved trace.
 Single-band sweeps restart with 101 points; MULTI scans its eight bands anew.
+CABLE restarts in **HF CAL** (28–29.7 MHz, 401 points) with a 14.2 MHz
+calculator target. Cable range, target frequency and velocity-factor adjustments
+are session settings; a normal VNA calibration save
+stores the velocity factor with that slot.
 TUNE returns to its band's sweep; band pickers and calibration walkthroughs are
 not resumed. A fresh or older configuration without a saved screen starts at 20 m.
 
@@ -110,6 +121,8 @@ write slots 5/6. The ANT walkthrough is their write path.
 
 1. Connect the measurement cable to **CH0**. Attach standards at the cable end
    where the antenna will connect; keep adapters/cable consistent afterward.
+   To measure the cable itself in CABLE, instead calibrate at CH0 and attach the
+   cable afterward. Length is measured from the standards' connection point.
 2. Set each profile to **CAPTURE** or **KEEP**. Missing or incompatible profiles
    are automatically included and cannot be skipped. With both selected, every
    standard is measured over **both** profiles before the next prompt.
@@ -206,6 +219,101 @@ the same CW/data boundary used in single-band view; **30 m has no vertical line*
 
 The overview reuses the HF ANT calibration and internal working memory. No SD
 card, extra calibration file or per-band manual recall is needed.
+
+## 6. Measure a cable and calculate quarter-/half-wave lengths
+
+![Cable length measurement](images/antenna-expert/cable-length.png)
+
+Open **BANDS → CABLE**. The default **HF CAL** setting reuses the saved HF ANT
+profile and measures cable delay across **28–29.7 MHz**, the widest continuously
+calibrated HF band. A fit to the change in reflected phase estimates round-trip
+delay; physical length is `delay × speed of light × VF / 2`, with VF expressed
+as a fraction. The screen shows **metres and feet together, with two decimal
+places**, plus target lengths for **1/4 and 1/2 wavelength**.
+
+**No additional calibration slot or recalibration is needed if your saved ANT
+profile matches the connection and RF settings.** Length starts at the calibration
+reference plane: where you attached OPEN/SHORT/LOAD. If you calibrated through a
+short lead, keep that lead attached and connect the cable being measured after
+it. To include that lead in the measured length instead, recalibrate directly at
+CH0. A calibration made at the far end of an antenna feedline removes that feedline
+from the measurement; it cannot then measure the feedline itself.
+
+1. Set the cable's **velocity factor (VF)** from its specification. Turn the
+   roller or tap **− / +** below VF to adjust it by one percentage point (1–100%).
+   The starting value is the current VNA VF setting (70% after a full reset;
+   invalid values fall back to 66%). Incorrect VF gives proportionally incorrect
+   physical length.
+2. Attach the cable to **CH0**, or after the retained calibration lead, with its
+   **far end open**: no antenna or load. A completed sweep supplies a fresh length.
+   The header names the calibration band, such as **ANT CAL: 10m**. If its saved
+   profile is absent or incompatible, it says **NEEDS ANT CAL** and shows no
+   measured length. It does not silently substitute an uncalibrated reading.
+3. Tap **FREQ** to enter the desired operating frequency (for example, **7.1**,
+   then **M/MHz**). If it lies in a covered band, CABLE switches to **FREQ CAL**,
+   loads the matching **HF or V/U ANT profile**, and starts a fresh 401-point
+   sweep within that band. For example, 7.1 MHz uses 40 m/HF; 145 MHz uses 2 m/V/U.
+   The header identifies the measurement band. Interpolation stays between
+   calibration points in that band; it never crosses uncalibrated band gaps.
+4. Compare the measured length with the **1/4** or **1/2** target below it. At
+   7.1 MHz and 66% VF, these are **6.97 m / 22.86 ft** and **13.93 m / 45.72 ft**.
+   The target calculations themselves need no calibration. They describe physical
+   cable length using VF, not free-space antenna dimensions. FREQ CAL measures
+   average delay across the selected band, not an exact phase null at one frequency.
+5. Tap **PAUSE / RUN** to hold/resume the reading. VF adjustments update the held
+   length and both targets without another sweep or flash write. Entering a new
+   frequency selects its measurement range and resumes the sweep. **BACK** returns
+   to BANDS; **ANT** returns to the previous antenna band, whose **VNA** button
+   opens the standard interface.
+
+![Cable measurement with the V/U ANT profile selected for 2 m](images/antenna-expert/cable-frequency-cal.png)
+
+These cable-screen examples use synthetic measurements rendered by the
+firmware UI test harness. Actual results depend on the cable and calibration.
+
+The frequency keypad accepts **50 kHz–2.7 GHz**, clamping entries outside that
+range. If the frequency is outside the calibrated bands, the wavelength targets
+still update, but measurement returns to the explicitly labeled **HF CAL**
+reference range. Canceling entry leaves the frequency, sweep and pause state
+unchanged. Target frequency and range changes do not write flash.
+
+**FREQ CAL is useful near the operating frequency, but a narrower band is not
+necessarily more accurate.** Short cables produce very little phase change in a
+narrow HF band, and calibration noise can dominate. A weak reflection, unresolved
+slope, excessive phase curvature or nearly aliased phase steps yields `--`.
+Try **HF CAL** for its wider HF span, or a wide resonance range for short jumpers.
+The displayed decimal places do not establish measurement accuracy.
+
+The range button cycles **HF CAL → FREQ CAL → 5 → 50 → 300 MHz** (FREQ CAL is
+skipped if the target is in a calibration gap). In either ANT-calibrated setting,
+**CAL** opens the existing ANT walkthrough with the relevant profile selected;
+empty profiles are included as usual. After completing or canceling it, return
+through **BANDS → CABLE**. Recalibration replaces the selected existing ANT
+profile, rather than allocating another slot.
+
+### Optional wide resonance ranges
+
+The **5/50/300 MHz** settings preserve the original cable measurement method:
+start at **50 kHz**, collect **401 points**, and find the first resolved quarter-wave
+S11 resonance of an open-ended uniform cable. Use 300 MHz for short jumpers and
+5 MHz for long feedlines. The first resonance must lie inside the sweep with
+enough samples before it. These ranges show **UNCAL** unless an ordinary continuous
+S11 calibration covers the range; the segmented ANT profiles are not applied
+across their gaps.
+
+For a calibrated wide sweep, select its range, tap **CAL → CAL WIZARD**, remove
+the cable being measured, and capture OPEN, SHORT and LOAD at CH0/the reference
+plane. **DONE IN RAM** uses no saved slot; ISOLN and THRU are unnecessary. Optionally
+save to an ordinary slot **0–4**. Selecting HF CAL, FREQ CAL or an antenna band
+loads its ANT profile again, replacing this RAM calibration. For a saved ordinary
+calibration, select the matching wide range before **CAL → RECALL CAL**.
+
+Both methods assume a uniform cable. Unusual networks, very lossy/long cables,
+undersampling and connector effects can produce unreliable estimates; this is
+not a TDR fault-location display. Existing electrical-delay compensation is
+temporarily zeroed during cable measurement and restored on exit. The screen
+is remembered across boots, but measured lengths are never saved. **No SD card
+is needed.**
 
 ## Reference and limitations
 

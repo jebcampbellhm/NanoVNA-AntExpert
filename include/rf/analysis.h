@@ -132,6 +132,12 @@ typedef struct {
 float s11imag(uint16_t i);
 float s11loss(uint16_t i);
 float s11index(uint16_t i);
+// First resolved quarter-wave resonance of an OPEN-ended cable, or zero.
+// Uses the current continuous, frequency-domain S11 sweep (no electrical delay).
+float cable_quarter_wave_frequency(void);
+// Round-trip delay from a linear fit to unwrapped S11 phase, or zero if unresolved.
+// Requires a uniform, calibrated frequency-domain sweep, with no electrical delay.
+float cable_phase_delay(void);
 
 // S11 Resonance Measure
 #define MEASURE_RESONANCE_COUNT 6

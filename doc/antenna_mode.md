@@ -383,3 +383,44 @@ the RF optimization settings. Flashed and verified on device 205431682033;
 all saved data remained identical before restart. Artifact directory:
 `../NanoVNA-X-builds/antenna-multi-shortcut/`. SHA-256:
 `de8ff3ad6aab14ce49722a81d406428c9595a01ecea590631243e62a9b0d78dc`.
+
+## Cable measurement and AntExpert 0.1.1 (2026-10-13)
+
+BANDS now opens CABLE, a 401-point S11 measurement with physical length in metres
+and feet, two decimal places, adjustable velocity factor, and quarter-/half-wave
+targets at a keypad-entered frequency. ANT returns to the previous band. Startup
+remembers CABLE as a view, taking fresh data with the HF reference range and
+14.2 MHz target; measured lengths are not stored.
+
+HF CAL reuses the HF ANT profile over 28–29.7 MHz. FREQ CAL measures within the
+band containing the target, automatically choosing HF or V/U ANT calibration.
+The phase-delay estimator unwraps adjacent S11 phases and fits a straight line;
+weak reflections, non-finite data, unresolved slopes, excessive curvature and
+nearly aliased phase increments are rejected. Target frequencies in gaps use
+the explicitly labeled HF reference measurement. Calibration interpolation stays
+inside a stored band segment. Existing profiles/slots and the ANT calibration
+grid are unchanged; no additional saved calibration record is needed.
+
+Optional 50 kHz–5/50/300 MHz ranges retain the first-quarter-wave resonance
+method and ordinary continuous-range calibration. ANT's segmented coefficients
+are never applied across gaps. CAL opens the ANT walkthrough in HF/FREQ CAL,
+or the ordinary calibration menu in a wide range. The measurement temporarily
+removes electrical-delay compensation and restores it when leaving CABLE.
+
+H4 flash savings use word-aligned functions and size optimization for formatting,
+display geometry, post-sweep analysis, calibration calculation and settings
+handlers. RF capture, DSP, interrupt and SPI/DMA transfer paths keep their
+existing optimization. The numeric font uses a dictionary of 16-bit rows plus
+repeat counts; decoding writes one glyph to caller-owned stack storage, and all
+23 glyphs match the original pixels. Standard VNA features remain enabled.
+`tools/pack_numfont.py` regenerates the packed font from its retained original.
+
+Regression coverage includes synthetic cable lengths and velocity factors,
+HF/V/U band boundaries, missing/incompatible calibration, keypad cancellation,
+paused VF updates, formatter bounds and exact font round trips. Normal and
+ASan/UBSan suites passed before the version bump, and the WSL H4 image fit the
+114 KiB code partition. The cable build was flashed with a full readback and
+unchanged saved data; hardware comparison against known lengths remains pending.
+See the [firmware verification record](firmware_hashes.md) for hashes and the
+[illustrated guide](antenna_expert.md#6-measure-a-cable-and-calculate-quarter-half-wave-lengths)
+for operation and calibration reference-plane limitations.

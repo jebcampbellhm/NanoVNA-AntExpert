@@ -834,6 +834,11 @@ void lcd_blit_bitmap(uint16_t x, uint16_t y, uint16_t width, uint16_t height, co
 #endif
 }
 
+#ifdef NANOVNA_F303
+// Size-optimize text formatting/rendering; keep SPI/DMA transfer code at -O2.
+#pragma GCC push_options
+#pragma GCC optimize("Os")
+#endif
 void lcd_drawchar(uint8_t ch, int x, int y) {
   lcd_blit_bitmap(x, y, FONT_GET_WIDTH(ch), FONT_GET_HEIGHT, FONT_GET_DATA(ch));
 }
@@ -1014,13 +1019,23 @@ int lcd_drawchar_size(uint8_t ch, int x, int y, uint8_t size) {
 }
 
 void lcd_drawfont(uint8_t ch, int x, int y) {
+#ifdef NANOVNA_F303
+  uint8_t glyph[2*NUM_FONT_GET_HEIGHT];
+  numfont16x22_decode(ch,glyph);
+  lcd_blit_bitmap(x, y, NUM_FONT_GET_WIDTH, NUM_FONT_GET_HEIGHT, glyph);
+#else
   lcd_blit_bitmap(x, y, NUM_FONT_GET_WIDTH, NUM_FONT_GET_HEIGHT, NUM_FONT_GET_DATA(ch));
+#endif
 }
 
 void lcd_drawstring_size(const char* str, int x, int y, uint8_t size) {
   while (*str)
     x += lcd_drawchar_size(*str++, x, y, size);
 }
+
+#ifdef NANOVNA_F303
+#pragma GCC pop_options
+#endif
 
 void lcd_vector_draw(int x, int y, const vector_data* v) {
   while (v->shift_x || v->shift_y) {

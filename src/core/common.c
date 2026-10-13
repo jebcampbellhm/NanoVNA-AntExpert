@@ -23,6 +23,11 @@
 #include <stdbool.h>
 #include <string.h>
 #include "hal.h"
+#ifdef NANOVNA_F303
+// Input parsing favors size; keep byte transforms and cycle delays unchanged.
+#pragma GCC push_options
+#pragma GCC optimize("Os")
+#endif
 
 // Use macro, std isdigit more big
 #define _isdigit(c) (c >= '0' && c <= '9')
@@ -247,6 +252,9 @@ int parse_line(char* line, char* args[], int max_cnt) {
 /*
  * Swap byte order in uint16_t buffer
  */
+#ifdef NANOVNA_F303
+#pragma GCC pop_options
+#endif
 void swap_bytes(uint16_t* buf, int size) {
   for (int i = 0; i < size; i++)
     buf[i] = __REVSH(buf[i]); // swap byte order (example 0x10FF to 0xFF10)

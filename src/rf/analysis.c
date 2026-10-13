@@ -21,7 +21,12 @@
 #include "rf/analysis.h"
 #include <stdalign.h>
 #include <math.h>
+#include <string.h>
 #include "ui/draw/traces.h"
+#ifdef NANOVNA_F303
+// Post-sweep analytics are not part of the ADC/DSP capture timing path.
+#pragma GCC optimize("Os")
+#endif
 
 extern alignas(8) float measured[2][SWEEP_POINTS_MAX][2];
 
@@ -416,6 +421,62 @@ void find_filter_pass(float max, s21_pass* p, uint16_t idx, int16_t mode) {
 
 float s11imag(uint16_t i) {
   return measured[0][i][1];
+}
+
+float cable_phase_delay(void) {
+  if (sweep_points < 5 || sweep_points > SWEEP_POINTS_MAX || !frequency0 || frequency1 <= frequency0)
+    return 0;
+  float n = sweep_points, center = (n-1)*0.5f;
+  float phase = 0, sum = 0, square = 0, cross = 0;
+  for (unsigned i = 0; i < sweep_points; ++i) {
+    const float *v = measured[0][i];
+    uint32_t bits[2]; memcpy(bits,v,sizeof bits);
+    // Reject invalid samples under fast-math, and weak/load-like reflections.
+    if ((bits[0]&0x7fffffffu)>0x3fc00000u || (bits[1]&0x7fffffffu)>0x3fc00000u ||
+        v[0]*v[0]+v[1]*v[1] < 0.0625f) return 0;
+    if (i) {
+      const float *w = measured[0][i-1];
+      float step = vna_atan2f(w[1]*v[0]-w[0]*v[1],w[0]*v[0]+w[1]*v[1]);
+      if (fabsf(step) > 0.8f*VNA_PI) return 0; // Too close to phase aliasing.
+      phase += step;
+    }
+    sum += phase; square += phase*phase; cross += (i-center)*phase;
+  }
+  float slope = cross / (n*(n*n-1)/12);
+  float span_phase = slope*(n-1), error = square-sum*sum/n-slope*cross;
+  // Require a positive resolved slope and a roughly straight phase response.
+  // Narrow bands may not resolve short jumpers: use HF CAL or a wider range.
+  if (span_phase < 0.01f || error > n*0.04f || span_phase*span_phase*n*n < 108*error) return 0;
+  return span_phase / (2*VNA_PI*(frequency1-frequency0));
+}
+
+float cable_quarter_wave_frequency(void) {
+  // An open cable starts near +1, travels through a negative imaginary lobe,
+  // then crosses the negative real axis at one quarter wavelength. Do not
+  // mistake near-DC noise, a matched load, or the next half-wave for that point.
+  if (sweep_points < 5 || sweep_points > SWEEP_POINTS_MAX || frequency0 == 0 || frequency1 <= frequency0 ||
+      measured[0][0][0] < 0.25f) return 0;
+  uint16_t armed = 0;
+  for (uint16_t i = 0; i < sweep_points; ++i) {
+    float re = measured[0][i][0], im = measured[0][i][1];
+    uint32_t bits[2];
+    memcpy(bits, measured[0][i], sizeof bits);
+    // A passive cable cannot have |Re/Im| > 1. Allow measurement error to 1.5;
+    // bit checks also reject NaN/Inf even when built with -ffast-math.
+    if ((bits[0] & 0x7fffffffu) > 0x3fc00000u ||
+        (bits[1] & 0x7fffffffu) > 0x3fc00000u) return 0;
+    if (!armed) {
+      if (im > 0.15f) return 0; // Wrong end condition / missed first lobe.
+      if (im < -0.25f) armed = i + 1;
+    } else if (im >= 0) {
+      if (i < 4 || i < armed + 2 || re > -0.25f) return 0;
+      if (im == 0) return get_frequency(i);
+      uint16_t x = armed - 1;
+      float f = measure_search_value(&x, 0, s11imag, MEASURE_SEARCH_RIGHT, MARKER_INVALID);
+      return f >= get_frequency(i-1) && f <= get_frequency(i) ? f : 0;
+    }
+  }
+  return 0;
 }
 
 float s11loss(uint16_t i) {

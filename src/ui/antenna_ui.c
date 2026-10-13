@@ -6,12 +6,20 @@
 #include "processing/antenna.h"
 #include "processing/antenna_cal.h"
 #include "ui/core/ui_core.h"
+#include "ui/core/ui_keypad.h"
 #include "ui/core/ui_menu_engine.h"
 #include "ui/menus/menu_cal.h"
+#include "rf/analysis.h"
 #include <string.h>
 
 static bool active, picker, tuning, valid;
 static bool cal_page;
+static bool cable;
+// HF reference (10 m band), target-frequency band, then wide resonance ranges.
+static uint8_t cable_range;
+static const freq_t cable_stops[] = {29700000,0,5000000,50000000,300000000};
+static float cable_old_delay;
+static freq_t cable_target = 14200000;
 static bool multi, multi_next;
 static uint8_t multi_scan, multi_selected;
 #define MULTI_POINTS 51
@@ -29,6 +37,7 @@ static float saved_portz;
 /* CPU-only cache: CCM is not DMA-accessible. Written in full before valid=true;
  * this NOLOAD section is intentionally not initialized by the startup code. */
 static union {
+  float cable_delay;
   float curve[SWEEP_POINTS_MAX];
   struct {
     uint8_t y[8][MULTI_POINTS]; // 0..64 graph coordinates; 255 means invalid.
@@ -69,6 +78,23 @@ static void line(int x, int y, int x1, int y1) {
   }
 }
 static void redraw(void) { request_to_redraw(REDRAW_ALL); }
+static void apply_range(void);
+static unsigned cable_target_band(void) {
+  for (unsigned i = 0; i < ANTENNA_BAND_COUNT; ++i)
+    if (cable_target >= antenna_bands[i].start && cable_target <= antenna_bands[i].stop)
+      return i;
+  return ANTENNA_BAND_COUNT;
+}
+UI_KEYBOARD_CALLBACK(input_cable_frequency) {
+  (void)data;
+  if (b) { b->p1.u = cable_target; return; }
+  freq_t f = keyboard_get_freq();
+  if (f < 50000) f = 50000;
+  if (f > FREQUENCY_MAX) f = FREQUENCY_MAX;
+  cable_target = f;
+  cable_range = cable_target_band() < ANTENNA_BAND_COUNT ? 1 : 0;
+  apply_range();
+}
 static void label(const char *s, int x, int y, unsigned scale) {
   if (y >= strip_y+STRIP_HEIGHT || y+(int)(FONT_GET_HEIGHT*scale) <= strip_y) return;
   while (*s) {
@@ -90,26 +116,51 @@ static void button(const char *s, int x, int y, int w, int h) {
 }
 static bool range_matches(void) {
   return frequency0 == expected_start && frequency1 == expected_stop &&
-         sweep_points == (multi ? MULTI_POINTS : tuning ? 21 : antenna_points) &&
+         sweep_points == (cable ? 401 : multi ? MULTI_POINTS : tuning ? 21 : antenna_points) &&
+         (!cable || electrical_delayS11 == 0) &&
          !(props_mode & DOMAIN_MODE) && current_props._portz == 50;
 }
+static bool cable_calibrated(void) {
+  return (cable_range < 2 ? antenna_cal_applied(cable_range == 1 && cable_target_band() >= 10) :
+                          current_props.magic != ANT_CAL_MAGIC) &&
+    (cal_status & (CALSTAT_APPLY|CALSTAT_ED|CALSTAT_ES|CALSTAT_ER)) ==
+                 (CALSTAT_APPLY|CALSTAT_ED|CALSTAT_ES|CALSTAT_ER) &&
+    cal_frequency0 <= expected_start && cal_frequency1 >= expected_stop &&
+    (config._vna_mode & VNA_MODE_RF_CONFIRMED_MASK);
+}
 static void apply_range(void) {
-  const antenna_band_t *b = &antenna_bands[band];
-  expected_start = tuning ? tune_frequency : b->start;
-  expected_stop = tuning ? tune_frequency : b->stop;
+  unsigned cal_band = cable_range == 1 ? cable_target_band() : 9;
+  const antenna_band_t *b = &antenna_bands[cable && cable_range < 2 ? cal_band : band];
+  expected_start = cable ? (cable_range < 2 ? b->start : 50000) : tuning ? tune_frequency : b->start;
+  expected_stop = cable ? (cable_range < 2 ? b->stop : cable_stops[cable_range]) : tuning ? tune_frequency : b->stop;
   frequency0 = expected_start; frequency1 = expected_stop;
-  sweep_points = multi ? MULTI_POINTS : tuning ? 21 : antenna_points;
+  sweep_points = cable ? 401 : multi ? MULTI_POINTS : tuning ? 21 : antenna_points;
   props_mode &= ~(DOMAIN_MODE | TD_CENTER_SPAN);
   current_props._portz = 50;
-  antenna_cal_load(band >= 10);
+  if (cable) {
+    electrical_delayS11 = 0;
+    if (cable_range < 2 && !antenna_cal_load(cal_band >= 10)) cal_status &= ~CALSTAT_APPLY;
+    // Phase measurements stay within a covered band; wide sweeps need ordinary CAL.
+    if (!cable_calibrated()) cal_status &= ~CALSTAT_APPLY;
+  } else antenna_cal_load(band >= 10);
   sweep_mode |= SWEEP_ENABLE;
   valid = false; multi_next = false;
   app_measurement_update_frequencies();
   redraw();
 }
 static void multi_enter(void);
+static void cable_enter(void) {
+  cable_old_delay = electrical_delayS11;
+  cable = true; picker = tuning = multi = false;
+  if (velocity_factor < 1 || velocity_factor > 100) velocity_factor = 66;
+  apply_range();
+}
+static void cable_leave(void) {
+  cable = false;
+  electrical_delayS11 = cable_old_delay;
+}
 static void save_mode(bool enabled) {
-  unsigned view = multi ? ANTENNA_VIEW_MULTI : band;
+  unsigned view = cable ? ANTENNA_VIEW_CABLE : multi ? ANTENNA_VIEW_MULTI : band;
   if (antenna_mode_decode(config._reserved) == enabled &&
       (!enabled || antenna_view_decode(config._reserved) == view)) return;
   uint8_t old[3]; memcpy(old,config._reserved,3);
@@ -129,9 +180,11 @@ void antenna_ui_enter(uint16_t data) {
     favorites = antenna_favorites_decode(config._reserved);
   }
   unsigned view = antenna_view_decode(config._reserved);
+  if (cable) cable_leave();
   active = true; picker = false; tuning = false; multi = false;
   ui_mode_normal();
   if (view == ANTENNA_VIEW_MULTI) multi_enter();
+  else if (view == ANTENNA_VIEW_CABLE) cable_enter();
   else { band = view; apply_range(); }
   save_mode(true);
 }
@@ -141,6 +194,7 @@ void antenna_ui_restore(void) {
   if (antenna_mode_decode(config._reserved)) antenna_ui_enter(0);
 }
 static void leave(void) {
+  if (cable) cable_leave();
   active = false;
   frequency0 = saved_start; frequency1 = saved_stop; sweep_points = saved_points;
   props_mode = (props_mode & ~(DOMAIN_MODE | TD_CENTER_SPAN)) |
@@ -171,6 +225,16 @@ static void multi_open(unsigned card) {
 }
 void antenna_ui_measurement(void) {
   if (!active || !range_matches()) { valid = false; return; }
+  if (cable) {
+    if (cable_range < 2) cache.cable_delay = cable_calibrated() ? cable_phase_delay() : 0;
+    else {
+      float f = !(cal_status & CALSTAT_APPLY) || cable_calibrated() ?
+                cable_quarter_wave_frequency() : 0;
+      cache.cable_delay = f > 0 ? 0.5f/f : 0;
+    }
+    valid = cache.cable_delay > 0;
+    return;
+  }
   if (multi) {
     unsigned k = multi_scan, bit = 1u<<k;
     float low = 1000, high = 0;
@@ -217,9 +281,10 @@ static void draw_picker(void) {
   uint8_t list[ANTENNA_BAND_COUNT];
   unsigned n = band_list(list);
   char s[48];
-  button("MULTI HF",0,0,250,36);
+  button("MULTI HF",0,0,170,36);
+  button("CABLE",170,0,130,36);
   plot_printf(s,sizeof(s),"PTS: %u",antenna_points);
-  button(s,260,0,220,36);
+  button(s,300,0,180,36);
   button(group == 0 ? "[HF+6]" : "HF+6",0,38,160,42);
   button(group == 1 ? "[V/UHF]" : "V/UHF",160,38,160,42);
   button(group == 2 ? "[FAV]" : "FAV",320,38,160,42);
@@ -328,7 +393,43 @@ static void draw_multi(void) {
     ink=GET_PALTETTE_COLOR(LCD_FG_COLOR);
   }
 }
+static void draw_cable(void) {
+  char s[48];
+  bool calibrated = cable_calibrated();
+  label("CABLE LENGTH",12,8,3);
+  button("ANT",380,0,100,44);
+  if (cable_range < 2) {
+    unsigned b = cable_range ? cable_target_band() : 9;
+    plot_printf(s,sizeof s,"%s %s | OPEN end",calibrated ? "ANT CAL:" : "NEEDS ANT CAL:",antenna_bands[b].name);
+    label(s,12,48,1);
+  } else label(calibrated ? "OPEN end | CAL: S11 APPLIED" : "OPEN end | UNCAL: CAL at CH0",12,48,1);
+  if (valid && range_matches() && (cable_range >= 2 || calibrated)) {
+    float metres = (SPEED_OF_LIGHT/200.0f)*velocity_factor*cache.cable_delay;
+    plot_printf(s,sizeof s,"%.2f m",metres); label(s,12,72,4);
+    plot_printf(s,sizeof s,"%.2f ft",metres/0.3048f); label(s,12,124,3);
+  } else {
+    label("-- m / -- ft",12,80,3);
+    label("Check CAL/end; try wider range",12,124,1);
+  }
+  plot_printf(s,sizeof s,"VF %u%%",velocity_factor);
+  label(s,338,76,2);
+  button("-",338,110,60,44); button("+",408,110,60,44);
+  plot_printf(s,sizeof s,"FREQ %.6f MHz",(double)cable_target/1000000.0);
+  button(s,12,166,310,38);
+  label("Roller: VF",338,180,1);
+  float target = (SPEED_OF_LIGHT/400.0f)*velocity_factor/cable_target;
+  for (unsigned i = 0; i < 2; ++i, target *= 2) {
+    plot_printf(s,sizeof s,"1/%u: %.2f m / %.2f ft",i ? 2 : 4,target,target/0.3048f);
+    label(s,12,214+30*i,2);
+  }
+  button("BACK",0,276,100,44);
+  plot_printf(s,sizeof s,"%u MHz",cable_stops[cable_range]/1000000);
+  button(cable_range < 2 ? (cable_range ? "FREQ CAL" : "HF CAL") : s,100,276,160,44);
+  button((sweep_mode & SWEEP_ENABLE) ? "PAUSE" : "RUN",260,276,120,44);
+  button("CAL",380,276,100,44);
+}
 static void draw_strip(void) {
+  if (cable) { draw_cable(); return; }
   if (cal_page) { draw_cal(); return; }
   if (picker) { draw_picker(); return; }
   if (multi) { draw_multi(); return; }
@@ -458,9 +559,46 @@ static void tune_step(bool up) {
   else tune_frequency = tune_frequency-b->start < step ? b->start : tune_frequency-step;
   apply_range();
 }
+static void cable_vf_step(bool up) {
+  if (up && velocity_factor < 100) ++velocity_factor;
+  if (!up && velocity_factor > 1) --velocity_factor;
+}
 bool antenna_ui_touch(int x, int y) {
   if (!active) return false;
   touch_wait_release();
+  if (cable) {
+    if (y < 44 && x >= 380) { cable_leave(); apply_range(); save_mode(true); }
+    else if (y >= 110 && y < 154) {
+      if (x >= 338 && x < 398) cable_vf_step(false);
+      else if (x >= 408 && x < 468) cable_vf_step(true);
+    } else if (y >= 166 && y < 204 && x >= 12 && x < 322) {
+      ui_mode_keypad(KM_ANT_CABLE_FREQ);
+      return true;
+    } else if (y >= 276) {
+      if (x < 100) { cable_leave(); picker = true; page = 0; apply_range(); save_mode(true); }
+      else if (x < 260) {
+        cable_range = (cable_range+1)%5;
+        if (cable_range == 1 && cable_target_band() == ANTENNA_BAND_COUNT) ++cable_range;
+        apply_range();
+      }
+      else if (x < 380) {
+        if (!range_matches()) apply_range();
+        else sweep_mode ^= SWEEP_ENABLE;
+        sweep_mode &= ~SWEEP_ONCE;
+      } else if (cable_range < 2) {
+        cal_mask = 1u << (cable_range == 1 && cable_target_band() >= 10);
+        cable_leave(); cal_page = true; save_mode(true);
+      } else {
+        // Use the standard continuous-range CAL workflow and its ordinary slots.
+        if (!range_matches()) apply_range();
+        valid = false;
+        menu_push_submenu(menu_cal_menu); ui_mode_menu();
+        redraw(); draw_all(); menu_draw(-1);
+        return true; // No later clear request may blank the freshly drawn menu.
+      }
+    }
+    redraw(); return true;
+  }
   if (cal_page) {
     unsigned stage=antenna_cal_stage();
     if (y>=276 && x<200) {
@@ -483,8 +621,9 @@ bool antenna_ui_touch(int x, int y) {
   }
   if (picker) {
     uint8_t list[ANTENNA_BAND_COUNT]; unsigned n = band_list(list);
-    if (y < 36 && x < 250) multi_enter();
-    else if (y < 36 && x >= 260) {
+    if (y < 36 && x < 170) multi_enter();
+    else if (y < 36 && x < 300) cable_enter();
+    else if (y < 36) {
       antenna_points = antenna_points == 101 ? 201 : (antenna_points == 201 ? 401 : 101);
       tuning = false; apply_range();
     }
@@ -541,6 +680,10 @@ bool antenna_ui_touch(int x, int y) {
 }
 bool antenna_ui_lever(uint16_t status) {
   if (!active) return false;
+  if (cable) {
+    if (status & (EVT_UP|EVT_DOWN)) cable_vf_step((status & EVT_UP) != 0);
+    redraw(); return true;
+  }
   if (cal_page) return true; // Walkthrough uses explicit touch actions.
   if (multi) {
     if (status & EVT_BUTTON_SINGLE_CLICK) multi_open(multi_selected);

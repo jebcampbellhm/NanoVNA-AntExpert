@@ -1,6 +1,31 @@
-# Firmware verification — 2026-10-12
+# Firmware verification
 
-## Current development H4
+## Cable-calibration build — 2026-10-13
+
+The HF/FREQ CAL cable build was compiled in WSL with Arm GCC 14.2.1 and flashed
+to the development ZeeTK H4. A full 256 KiB readback confirmed the programmed
+firmware and preservation of every saved-data byte before startup. Normal USB
+serial enumeration returned after the restart. Physical cable-length accuracy
+has not yet been confirmed.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Flashed H4.bin | 116704 | `98afb604c1cb8f7927f8657108e89788ebb5e7e88d859474a81c042bc2993cae` |
+| Corresponding H4.dfu | 117013 | `a42052ed338b03aeb7c3101285096454692b8215ded6bfef8e3f385de2facb10` |
+
+All 145,408 bytes at and above `0x0801C800` matched the pre-flash backup.
+The code image left 32 bytes below that boundary, including erase-page rounding.
+Normal host tests and the complete address/undefined-behavior sanitizer suite
+passed, including phase-delay fitting, profile selection, keypad/formatting and
+byte-for-byte numeric-font decompression.
+
+**This flashed image still reports product version 0.1.0.** The subsequent 0.1.1
+publication changes the version and Git/build metadata. Its binary is therefore
+different from the image above. Use the checksum manifest from the selected
+0.1.1 CI artifact; do not use these development-image hashes to verify it.
+No device reflash is implied by publishing that version bump.
+
+## Screen restoration and reset build — 2026-10-12 (historical)
 
 The screen-restoration, 10 kHz HF calibration-grid and full-reset update was
 built in WSL with Arm GCC 14.2.1 and flashed with programmer verification. The

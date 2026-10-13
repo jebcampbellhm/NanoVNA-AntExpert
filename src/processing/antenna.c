@@ -53,10 +53,10 @@ antenna_result_t antenna_analyze(const float *swr, unsigned count) {
   r.bandwidth_valid = true;
   return r;
 }
-// v2: 16 favorite bits, five view bits (0..15 band, 16 MULTI), one
+// v2: 16 favorite bits, five view bits (0..15 band, 16 MULTI, 17 CABLE), one
 // startup-mode bit and a two-bit tag. Invalid/erased records use defaults.
 static bool saved_view_valid(const uint8_t bytes[3]) {
-  return (bytes[2] & 0xc0) == 0xc0 && (bytes[2] & 31) <= ANTENNA_VIEW_MULTI;
+  return (bytes[2] & 0xc0) == 0xc0 && (bytes[2] & 31) <= ANTENNA_VIEW_CABLE;
 }
 unsigned antenna_view_decode(const uint8_t bytes[3]) {
   return saved_view_valid(bytes) ? bytes[2] & 31 : 5;
@@ -82,6 +82,6 @@ void antenna_mode_encode(uint8_t bytes[3], bool enabled) {
   encode_settings(bytes,antenna_favorites_decode(bytes),antenna_view_decode(bytes),enabled);
 }
 void antenna_view_encode(uint8_t bytes[3], unsigned view) {
-  if (view > ANTENNA_VIEW_MULTI) return;
+  if (view > ANTENNA_VIEW_CABLE) return;
   encode_settings(bytes,antenna_favorites_decode(bytes),view,antenna_mode_decode(bytes));
 }

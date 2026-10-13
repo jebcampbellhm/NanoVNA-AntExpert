@@ -51,5 +51,5 @@ with tempfile.TemporaryDirectory() as d:
     p = Path(d)
     (p / 'test.c').write_text(source)
     subprocess.run(shlex.split(os.environ.get('HOST_CC', 'cc')) + [
-        '-std=c11', '-Wall', '-Wextra', '-Werror', str(p / 'test.c'), '-o', str(p / 'test')], check=True)
+        '-std=c11', '-Os', '-Wall', '-Wextra', '-Werror', str(p / 'test.c'), '-o', str(p / 'test')], check=True)
     subprocess.run([str(p / 'test')], check=True)

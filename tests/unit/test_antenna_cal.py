@@ -257,6 +257,16 @@ int main(void) {
   assert(antenna_cal_step());
   assert(antenna_cal_saved(0) && antenna_cal_saved(1));
   assert(antenna_cal_load(0));
+  assert(antenna_cal_applied(0) && !antenna_cal_applied(1));
+  current_props._power ^= 1;
+  assert(!antenna_cal_applied(0)); current_props._power ^= 1;
+  config._IF_freq++;
+  assert(!antenna_cal_applied(0)); config._IF_freq--;
+  config._harmonic_freq_threshold++;
+  assert(!antenna_cal_applied(0)); config._harmonic_freq_threshold--;
+  cal_status &= ~CALSTAT_APPLY;
+  assert(!antenna_cal_applied(0)); cal_status |= CALSTAT_APPLY;
+  assert(antenna_cal_applied(0));
   config._band_mode=0;
   assert(!antenna_cal_saved(0) && !antenna_cal_load(0) && !(cal_status&CALSTAT_APPLY));
   config._band_mode=3;

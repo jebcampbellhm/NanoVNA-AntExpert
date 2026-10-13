@@ -29,6 +29,10 @@ static bool compatible(const properties_t *p) {
     p->_reserved1[2] == (uint32_t)config._IF_freq && p->_reserved1[3] == config._xtal_freq &&
     p->_reserved1[4] == config._band_mode;
 }
+bool antenna_cal_applied(unsigned profile) {
+  return compatible(&current_props) && current_props._reserved1[0] == profile &&
+    current_props._power == cal_power && (cal_status & CALSTAT_APPLY);
+}
 bool antenna_cal_load(unsigned profile) {
   if (stage || profile > 1) return false;
   const properties_t *p=get_properties(ANT_CAL_FIRST_SLOT+profile);

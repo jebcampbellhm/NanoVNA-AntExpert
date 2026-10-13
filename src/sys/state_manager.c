@@ -30,6 +30,10 @@
 #include "driver/si5351.h"
 
 #include <string.h>
+#ifdef NANOVNA_F303
+// Settings initialization/persistence is outside the RF capture path.
+#pragma GCC optimize("Os")
+#endif
 
 #define SWEEP_STATE_AUTOSAVE_DELAY   MS2ST(750)
 #define SWEEP_STATE_AUTOSAVE_MIN_GAP S2ST(3)

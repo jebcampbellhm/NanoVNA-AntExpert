@@ -23,6 +23,10 @@
 #include <string.h>
 #include "nanovna.h"
 #include "chprintf.h"
+#ifdef NANOVNA_F303
+// Display conversion/drawing is outside the ADC/DSP capture path.
+#pragma GCC optimize("Os")
+#endif
 
 // Globals
 uint16_t trace_index_x[TRACE_INDEX_COUNT][SWEEP_POINTS_MAX];

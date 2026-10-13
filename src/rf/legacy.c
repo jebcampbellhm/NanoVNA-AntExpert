@@ -24,7 +24,11 @@
 // Use size optimization (module not need fast speed, better have smallest size)
 #pragma GCC push_options
 
+#ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
+#else
 #pragma GCC optimize("O2")
+#endif
 #include <math.h>
 #include <stdlib.h>
 #include "rf/analysis.h"

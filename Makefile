@@ -20,7 +20,9 @@ endif
 # Compiler options here.
 ifeq ($(USE_OPT),)
  ifeq ($(TARGET),F303)
-USE_OPT = -O2 -fno-inline-small-functions -ggdb -fomit-frame-pointer -falign-functions=16 --specs=nano.specs -fstack-usage -std=c11
+# Cortex-M4 instructions need halfword alignment; word alignment avoids wasting
+# up to 14 bytes per function. Keep -O2 for the capture/DSP/RTOS paths.
+USE_OPT = -O2 -fno-inline-small-functions -ggdb -fomit-frame-pointer -falign-functions=4 --specs=nano.specs -fstack-usage -std=c11
 #USE_OPT+=-fstack-protector-strong
  else
 USE_OPT = -Os -fno-inline-small-functions -ggdb -fomit-frame-pointer -falign-functions=16 --specs=nano.specs -fstack-usage -std=c11
@@ -376,7 +378,8 @@ TEST_SUITES := $(TEST_BUILD_DIR)/test_common $(TEST_BUILD_DIR)/test_vna_math \
                $(TEST_BUILD_DIR)/test_scheduler $(TEST_BUILD_DIR)/test_measurement_engine \
                $(TEST_BUILD_DIR)/test_shell_service $(TEST_BUILD_DIR)/test_display_presenter \
                $(TEST_BUILD_DIR)/test_accuracy_analysis $(TEST_BUILD_DIR)/test_si5351 \
-               $(TEST_BUILD_DIR)/test_si5351_h4 $(TEST_BUILD_DIR)/test_antenna
+               $(TEST_BUILD_DIR)/test_si5351_h4 $(TEST_BUILD_DIR)/test_antenna \
+               $(TEST_BUILD_DIR)/test_legacy_measure_h4 $(TEST_BUILD_DIR)/test_common_h4
 
 $(TEST_BUILD_DIR)/test_antenna: tests/unit/test_antenna.c src/processing/antenna.c | $(TEST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -Iinclude -o $@ $^ $(HOST_LDFLAGS)
@@ -386,6 +389,9 @@ $(TEST_BUILD_DIR):
 
 $(TEST_BUILD_DIR)/test_common: tests/unit/test_common.c src/core/common.c | $(TEST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -DNANOVNA_HOST_TEST -Itests/stubs -Iinclude -Isrc -o $@ $^ $(HOST_LDFLAGS)
+
+$(TEST_BUILD_DIR)/test_common_h4: tests/unit/test_common.c src/core/common.c | $(TEST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -DNANOVNA_HOST_TEST -DNANOVNA_F303 -Itests/stubs -Iinclude -Isrc -o $@ $^ $(HOST_LDFLAGS)
 
 $(TEST_BUILD_DIR)/test_vna_math: tests/unit/test_vna_math.c src/processing/vna_math.c | $(TEST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -DNANOVNA_HOST_TEST -Itests/stubs -Iinclude -Isrc -o $@ $^ $(HOST_LDFLAGS)
@@ -399,6 +405,9 @@ $(TEST_BUILD_DIR)/test_dsp_backend: tests/unit/test_dsp_backend.c src/processing
 
 $(TEST_BUILD_DIR)/test_legacy_measure: tests/unit/test_legacy_measure.c src/processing/vna_math.c src/rf/legacy.c src/rf/analysis.c | $(TEST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -Wno-unused-function -Wno-unused-variable -Itests/stubs -Iinclude -Isrc -o $@ $^ $(HOST_LDFLAGS)
+
+$(TEST_BUILD_DIR)/test_legacy_measure_h4: tests/unit/test_legacy_measure.c src/processing/vna_math.c src/rf/legacy.c src/rf/analysis.c | $(TEST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -DNANOVNA_F303 -Wno-unused-function -Wno-unused-variable -Itests/stubs -Iinclude -Isrc -o $@ $^ $(HOST_LDFLAGS)
 
 $(TEST_BUILD_DIR)/test_event_bus: tests/unit/test_event_bus.c src/sys/event_bus.c | $(TEST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -Itests/stubs -Iinclude -Isrc -o $@ $^ $(HOST_LDFLAGS)
@@ -443,6 +452,9 @@ test: tests
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_irq_wrappers.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_sweep_snapshot.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_antenna_ui.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_chprintf.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_keypad.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_numfont.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_marker_frequency.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_snp_import.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_usb_control.py
@@ -469,6 +481,8 @@ include $(RULESPATH)/rules.mk
 VERSION_HEADER := $(BUILDDIR)/generated/version_info.h
 
 PRE_MAKE_ALL_RULE_HOOK: $(VERSION_HEADER)
+# The hook and objects run concurrently under -j on a clean build.
+$(OBJDIR)/runtime_entry.o $(OBJDIR)/shell_commands.o: $(VERSION_HEADER)
 
 .PHONY: FORCE_VERSION
 FORCE_VERSION:

@@ -23,6 +23,10 @@
 #include "nanovna.h"
 #include "processing/antenna_cal.h"
 #include "rf/sweep.h"
+#ifdef NANOVNA_F303
+// Coefficient calculation is outside the RF capture path; favor flash size.
+#pragma GCC optimize("Os")
+#endif
 
 // Forward declarations of static functions
 static void eterm_set(int term, float re, float im);

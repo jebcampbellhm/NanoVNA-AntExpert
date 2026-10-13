@@ -31,6 +31,10 @@
 #include "nanovna.h"
 #include "chprintf.h"
 #include <math.h>
+#ifdef NANOVNA_F303
+// Formatting is not in the RF capture path; preserve every format at lower size.
+#pragma GCC optimize("Os")
+#endif
 
 // Enable [flags], support:
 // ' ' Prepends a space for positive signed-numeric types. positive = ' ', negative = '-'. This flag

@@ -5,6 +5,7 @@
 bool antenna_cal_valid(const properties_t *p);
 bool antenna_cal_saved(unsigned profile);
 bool antenna_cal_load(unsigned profile);
+bool antenna_cal_applied(unsigned profile);
 bool antenna_cal_interpolate(freq_t f, float data[CAL_TYPE_COUNT][2]);
 /* 0 selects profiles; 1/2/3 collect OPEN/SHORT/LOAD; 4 commits. */
 bool antenna_cal_begin(unsigned mask);

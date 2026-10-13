@@ -148,6 +148,9 @@ UI_FUNCTION_ADV_CALLBACK(menu_stored_trace_acb) {
 
 
 const keypads_list keypads_mode_tbl[KM_NONE] = {
+#ifdef NANOVNA_F303
+    [KM_ANT_CABLE_FREQ] = {KEYPAD_FREQ, 0, "CABLE FREQ", input_cable_frequency},
+#endif
     //                      key format     data for cb    text at bottom        callback function
     [KM_START] = {KEYPAD_FREQ, ST_START, "START", input_freq},          // start
     [KM_STOP] = {KEYPAD_FREQ, ST_STOP, "STOP", input_freq},             // stop

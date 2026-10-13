@@ -89,7 +89,7 @@ int main(void) {
     if(i) assert(antenna_60m_centers[i]>antenna_60m_centers[i-1]);
   }
   // Every band and MULTI survive encoding, favorites edits, and ANT/VNA changes.
-  for(unsigned view=0;view<=ANTENNA_VIEW_MULTI;++view) {
+  for(unsigned view=0;view<=ANTENNA_VIEW_CABLE;++view) {
     antenna_view_encode(bytes,view);
     assert(antenna_view_decode(bytes)==view);
     antenna_favorites_encode(bytes,0xa55a);
@@ -100,11 +100,11 @@ int main(void) {
     assert(antenna_favorites_decode(bytes)==0xa55a);
   }
   uint8_t previous[3]; memcpy(previous,bytes,3);
-  antenna_view_encode(bytes,17); assert(memcmp(previous,bytes,3)==0);
+  antenna_view_encode(bytes,18); assert(memcmp(previous,bytes,3)==0);
   for(unsigned x=0;x<256;++x) {
     bytes[0]=bytes[1]=0xff;bytes[2]=x;
-    assert(antenna_view_decode(bytes)<=ANTENNA_VIEW_MULTI);
-    if((x&0xc0)==0xc0 && (x&31)>16) {
+    assert(antenna_view_decode(bytes)<=ANTENNA_VIEW_CABLE);
+    if((x&0xc0)==0xc0 && (x&31)>17) {
       assert(antenna_view_decode(bytes)==5 && !antenna_mode_decode(bytes));
     }
   }

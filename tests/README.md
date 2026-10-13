@@ -10,6 +10,16 @@ functions without requiring any STM32 hardware.
   - `test_measurement_pipeline.c`: integration glue that proxies sweep requests
   - `test_dsp_backend.c`: scalar DSP accumulation path that runs when SIMD is disabled
   - `test_legacy_measure.c`: RF legacy analytics (quadratic solver, cursor search, regression)
+  - `test_antenna_ui.py`: ANT navigation, calibration selection, cable HF/V/U
+    frequency switching, missing calibration, pause, keypad cancel and rendering
+  - `test_antenna_cal.py`: segmented grids, OSL coefficients, dual-profile
+    capture/storage and RF compatibility of an applied calibration
+  - `test_legacy_measure.c`: also checks calibrated cable phase-delay fits
+    against synthetic lengths, velocity factors, noise and invalid samples;
+    the H4 variant uses 401 points and retains the wide resonance checks
+  - `test_numfont.py`: all 23 compressed numeric glyphs must match the
+    original pixels; checks regeneration, bounds and independent buffers
+  - `test_chprintf.py` / `test_keypad.py`: numeric formats and frequency entry
   - `test_event_bus.c`: synchronous/asynchronous event bus dispatch with mailbox recycling
   - `test_scheduler.c`: cooperative task scheduler slot allocation, failure paths, and stop logic
   - `test_measurement_engine.c`: RF engine state machine, event publication, and sweep orchestration

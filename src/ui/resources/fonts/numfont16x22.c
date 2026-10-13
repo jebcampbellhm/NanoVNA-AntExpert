@@ -22,6 +22,27 @@
 #include <stdint.h>
 #include "nanovna.h"
 
+#ifdef NANOVNA_F303
+#include "numfont16x22_compact.h"
+#pragma GCC optimize("Os")
+
+// Decode one glyph into caller-owned storage; no shared mutable font buffer.
+void numfont16x22_decode(uint8_t ch, uint8_t out[44]) {
+  if (ch >= NUMFONT_GLYPHS) {
+    for (unsigned i=0;i<44;++i) out[i]=0;
+    return;
+  }
+  const uint8_t *p = numfont_packed + numfont_offsets[ch];
+  unsigned y=0;
+  uint16_t row=0;
+  while (y<22) {
+    unsigned code=*p++, count=1;
+    if (code<NUMFONT_ROWS) row=numfont_rows[code];
+    else count=code-NUMFONT_ROWS+1;
+    do { out[2*y]=row>>8; out[2*y+1]=row; ++y; } while (--count);
+  }
+}
+#else
 const uint8_t numfont16x22[] = {
     _BMP16(0b0000111111110000), _BMP16(0b0011111111111100), _BMP16(0b0111111111111110),
     _BMP16(0b0111110000111110), _BMP16(0b1111100000011111), _BMP16(0b1111000000001111),
@@ -370,3 +391,4 @@ const uint8_t numfont16x22[] = {
   _BMP16(0b0000000000000000),
 #endif
 };
+#endif

@@ -342,6 +342,11 @@ config_t config = {
 
 alignas(8) properties_t current_props;
 
+#ifdef NANOVNA_F303
+// User setting changes favor size. Sweep service, threads and IRQs keep -O2.
+#pragma GCC push_options
+#pragma GCC optimize("Os")
+#endif
 int load_properties(uint32_t id) {
   int r = caldata_recall(id);
   app_measurement_update_frequencies();
@@ -630,6 +635,10 @@ void reset_sweep_frequency(void) {
                     REDRAW_AREA);
   sweep_service_reset_progress();
 }
+
+#ifdef NANOVNA_F303
+#pragma GCC pop_options
+#endif
 
 //
 static void vna_shell_execute_line(char* line) {

@@ -20,6 +20,12 @@ HEADER = r'''
 #include <stdio.h>
 #define NANOVNA_F303 1
 #define SWEEP_POINTS_MAX 401
+#define SPEED_OF_LIGHT 299792458.0f
+#define FREQUENCY_MAX 2700000000U
+extern uint8_t velocity_factor;
+extern float electrical_delayS11;
+float cable_quarter_wave_frequency(void);
+float cable_phase_delay(void);
 #define FONT_START_CHAR 0x16
 #define SWEEP_ENABLE 1
 #define SWEEP_ONCE 2
@@ -37,6 +43,11 @@ HEADER = r'''
 #define LCD_TRACE_5_COLOR 3
 #define UI_NORMAL 0
 #define UI_MENU 1
+#define UI_KEYPAD 2
+#define KM_ANT_CABLE_FREQ 33
+typedef struct { union { uint32_t u; } p1; } button_t;
+#define UI_KEYBOARD_CALLBACK(name) void name(uint16_t data,button_t *b)
+UI_KEYBOARD_CALLBACK(input_cable_frequency);
 #define EVT_BUTTON_SINGLE_CLICK 1
 #define EVT_UP 2
 #define EVT_DOWN 4
@@ -75,6 +86,8 @@ int host_printf(char *,size_t,const char *,...);
 void app_measurement_update_frequencies(void);
 void ui_mode_normal(void);
 void ui_mode_menu(void);
+void ui_mode_keypad(int);
+freq_t keyboard_get_freq(void);
 void menu_push_submenu(const menuitem_t *);
 void draw_all(void);
 void menu_draw(uint32_t);
@@ -93,7 +106,12 @@ HARNESS = r'''
 #include <string.h>
 uint32_t frequency0=1000000, frequency1=30000000, cal_frequency0, cal_frequency1;
 uint16_t sweep_points=101, props_mode=DOMAIN_MODE|TD_CENTER_SPAN, cal_status;
-uint8_t sweep_mode=0, ui_mode=UI_MENU;
+uint8_t sweep_mode=0, ui_mode=UI_MENU, velocity_factor=66;
+float electrical_delayS11;
+static float cable_test_frequency;
+static float cable_test_delay;
+float cable_quarter_wave_frequency(void) { return cable_test_frequency; }
+float cable_phase_delay(void) { return cable_test_delay; }
 struct config_stub config={._vna_mode=VNA_MODE_RF_CONFIRMED_MASK};
 struct props_stub current_props={._portz=75};
 float measured[2][401][2];
@@ -111,8 +129,20 @@ int host_printf(char *s,size_t size,const char *fmt,...) {
 static uint16_t pending_redraw;
 static bool menu_visible;
 static unsigned cal_stage, capture_mask;
-bool antenna_cal_saved(unsigned p) { (void)p; return false; }
-bool antenna_cal_load(unsigned p) { (void)p; return false; }
+static bool saved_profiles[2];
+bool antenna_cal_saved(unsigned p) { return p<2 && saved_profiles[p]; }
+bool antenna_cal_applied(unsigned p) {
+  return current_props.magic==0x414e5431 && current_props._reserved1[0]==p &&
+         (cal_status&CALSTAT_APPLY);
+}
+bool antenna_cal_load(unsigned p) {
+  assert(p<2);
+  if(!saved_profiles[p]) return false;
+  current_props.magic=0x414e5431; current_props._reserved1[0]=p;
+  cal_frequency0=p?50000000:1800000; cal_frequency1=p?1300000000:29700000;
+  cal_status=CALSTAT_APPLY|CALSTAT_ED|CALSTAT_ES|CALSTAT_ER;
+  return true;
+}
 bool antenna_cal_begin(unsigned mask) { capture_mask=mask; cal_stage=1; return true; }
 bool antenna_cal_step(void) { cal_stage=(cal_stage+1)%5; return true; }
 void antenna_cal_cancel(void) { cal_stage=0; }
@@ -174,6 +204,9 @@ void lcd_line(int x,int y,int x1,int y1) {
 void app_measurement_update_frequencies(void) { updates++; }
 void ui_mode_normal(void) { ui_mode=UI_NORMAL; }
 void ui_mode_menu(void) { ui_mode=UI_MENU; }
+static freq_t keyboard_frequency;
+freq_t keyboard_get_freq(void) { return keyboard_frequency; }
+void ui_mode_keypad(int mode) { assert(mode==KM_ANT_CABLE_FREQ); ui_mode=UI_KEYPAD; }
 void menu_push_submenu(const menuitem_t *m) { assert(m==menu_cal_menu); menus++; }
 void touch_wait_release(void) {}
 int config_save(void) { writes++; return fail_save?-1:0; }
@@ -304,11 +337,11 @@ int main(void) {
   // Every band at maximum point count, graph ceiling, and large readout.
   sweep_points=401; antenna_ui_enter(0); assert(sweep_points==101);
   antenna_ui_touch(20,295);
-  antenna_ui_touch(300,15); assert(sweep_points==201);
+  antenna_ui_touch(350,15); assert(sweep_points==201);
   preview("points-201");
-  antenna_ui_touch(300,15); assert(sweep_points==401);
-  antenna_ui_touch(300,15); assert(sweep_points==101);
-  antenna_ui_touch(300,15); antenna_ui_touch(300,15);
+  antenna_ui_touch(350,15); assert(sweep_points==401);
+  antenna_ui_touch(350,15); assert(sweep_points==101);
+  antenna_ui_touch(350,15); antenna_ui_touch(350,15);
   assert(sweep_points==401);
   antenna_ui_touch(400,295);
   for(unsigned g=0;g<2;g++) for(unsigned p=0;p<(g?1:2);p++)
@@ -484,13 +517,127 @@ int main(void) {
   antenna_ui_lever(EVT_UP);
   assert(messages==old_messages+1 && memcmp(prior_view,config._reserved,3)==0);
   fail_save=false;
+
+  // HF CAL defaults to the widest calibrated HF band, and requires saved CAL.
+  antenna_ui_touch(400,10); antenna_view_encode(config._reserved,5); antenna_ui_enter(0);
+  current_props.magic=0x414e5431; cal_status=CALSTAT_APPLY|CALSTAT_ED|CALSTAT_ES|CALSTAT_ER;
+  electrical_delayS11=123e-9f;
+  antenna_ui_touch(20,295); antenna_ui_touch(220,15);
+  assert(antenna_view_decode(config._reserved)==ANTENNA_VIEW_CABLE);
+  assert(frequency0==28000000 && frequency1==29700000 && sweep_points==401);
+  assert(electrical_delayS11==0 && !(cal_status&CALSTAT_APPLY));
+  cable_test_delay=2*30.48f/(SPEED_OF_LIGHT*0.66f);
+  antenna_ui_measurement();
+  want_min="30.48 m"; saw_min=false; preview("cable-no-hf-cal"); assert(!saw_min);
+  saved_profiles[0]=true; antenna_ui_enter(0); antenna_ui_measurement();
+  want_max="100.00 ft"; saw_min=saw_max=false;
+  preview("cable-length"); assert(saw_min && saw_max); want_min=want_max=NULL;
+  // Invalidating CAL while paused must also hide a cached calibrated result.
+  cal_status &= ~CALSTAT_APPLY;
+  want_min="30.48 m"; saw_min=false; preview("cable-cal-disabled"); assert(!saw_min);
+  cal_status |= CALSTAT_APPLY; want_min=NULL;
+  unsigned cable_writes=writes;
+  antenna_ui_touch(320,295); assert(!(sweep_mode&SWEEP_ENABLE));
+  antenna_ui_touch(150,180); assert(ui_mode==UI_KEYPAD && !antenna_ui_draw());
+  button_t current; input_cable_frequency(0,&current); assert(current.p1.u==14200000);
+  keyboard_frequency=7100000; input_cable_frequency(0,NULL); ui_mode_normal();
+  assert(frequency0==7000000 && frequency1==7300000 && (sweep_mode&SWEEP_ENABLE));
+  assert(antenna_cal_applied(0));
+  want_min="30.48 m"; saw_min=false; preview("cable-new-range"); assert(!saw_min);
+  antenna_ui_measurement();
+  want_min="1/4: 6.97 m / 22.86 ft"; want_max="1/2: 13.93 m / 45.72 ft";
+  saw_min=saw_max=false; preview("cable-targets"); assert(saw_min && saw_max);
+  // Cancellation never invokes the callback, changes range, or resumes sweep.
+  antenna_ui_touch(320,295); assert(!(sweep_mode&SWEEP_ENABLE));
+  unsigned cable_updates=updates;
+  antenna_ui_touch(150,180); ui_mode_normal();
+  input_cable_frequency(0,&current); assert(current.p1.u==7100000);
+  assert(updates==cable_updates && !(sweep_mode&SWEEP_ENABLE));
+  // A covered V/U frequency automatically selects that profile, never HF CAL.
+  keyboard_frequency=145000000; input_cable_frequency(0,NULL);
+  assert(frequency0==144000000 && frequency1==148000000 && !(cal_status&CALSTAT_APPLY));
+  want_min="30.48 m"; saw_min=false; antenna_ui_measurement();
+  preview("cable-no-vu-cal"); assert(!saw_min);
+  saved_profiles[1]=true; antenna_ui_enter(0); assert(antenna_cal_applied(1));
+  antenna_ui_measurement(); preview("cable-vu-cal"); assert(saw_min);
+  // Every preset selects its own covered range and HF/VU profile, including endpoints.
+  for(unsigned b=0;b<ANTENNA_BAND_COUNT;b++) for(unsigned edge=0;edge<2;edge++) {
+    keyboard_frequency=edge?antenna_bands[b].stop:antenna_bands[b].start;
+    input_cable_frequency(0,NULL);
+    assert(frequency0==antenna_bands[b].start && frequency1==antenna_bands[b].stop);
+    assert(antenna_cal_applied(b>=10));
+  }
+  // Gaps use the explicit HF reference range; never calibrate across band gaps.
+  keyboard_frequency=6000000; input_cable_frequency(0,NULL);
+  assert(frequency0==28000000 && frequency1==29700000 && antenna_cal_applied(0));
+  antenna_ui_touch(180,295); assert(frequency0==50000 && frequency1==5000000); // Skip FREQ CAL.
+  keyboard_frequency=0; input_cable_frequency(0,NULL);
+  input_cable_frequency(0,&current); assert(current.p1.u==50000);
+  preview("cable-target-min");
+  keyboard_frequency=UINT32_MAX; input_cable_frequency(0,NULL);
+  input_cable_frequency(0,&current); assert(current.p1.u==FREQUENCY_MAX);
+  preview("cable-target-max");
+  keyboard_frequency=14200000; input_cable_frequency(0,NULL); antenna_ui_measurement();
+  antenna_ui_touch(320,295); assert(!(sweep_mode&SWEEP_ENABLE));
+  cable_updates=updates; want_min=want_max=NULL;
+  antenna_ui_lever(EVT_UP); assert(velocity_factor==67);
+  want_min="30.94 m"; want_max="1/4: 3.54 m / 11.60 ft"; saw_min=saw_max=false;
+  preview("cable-vf-adjusted"); assert(saw_min && saw_max); want_min=want_max=NULL;
+  antenna_ui_touch(360,130); assert(velocity_factor==66);
+  for(unsigned i=0;i<110;i++) antenna_ui_touch(440,130);
+  assert(velocity_factor==100);
+  for(unsigned i=0;i<110;i++) antenna_ui_lever(EVT_DOWN);
+  assert(velocity_factor==1);
+  assert(writes==cable_writes && updates==cable_updates);
+  velocity_factor=66;
+  // Original wide resonance modes and ordinary CAL remain available.
+  antenna_ui_touch(180,295); assert(frequency1==5000000 && !(cal_status&CALSTAT_APPLY));
+  antenna_ui_touch(180,295); assert(frequency1==50000000 && (sweep_mode&SWEEP_ENABLE));
+  cable_test_frequency=(SPEED_OF_LIGHT/400.0f)*66/30.48f;
+  antenna_ui_measurement();
+  want_min="30.48 m"; saw_min=false; preview("cable-wide"); assert(saw_min); want_min=NULL;
+  frequency1=123456; electrical_delayS11=1e-9f;
+  antenna_ui_measurement(); preview("cable-range-changed");
+  antenna_ui_touch(320,295); assert(frequency1==50000000 && electrical_delayS11==0);
+  antenna_ui_touch(420,295);
+  assert(ui_mode==UI_MENU && menu_visible && !pending_redraw);
+  assert(!antenna_ui_draw() && menus==1);
+  current_props.magic=0; cal_frequency0=50000; cal_frequency1=50000000;
+  cal_status=CALSTAT_APPLY|CALSTAT_ED|CALSTAT_ES|CALSTAT_ER;
+  ui_mode_normal(); antenna_ui_measurement(); preview("cable-calibrated");
+  antenna_ui_enter(0); assert(electrical_delayS11==0 && frequency1==50000000);
+  current_props.magic=0x414e5431;
+  want_min="30.48 m"; saw_min=false; antenna_ui_measurement();
+  preview("cable-wrong-cal"); assert(!saw_min); want_min=NULL;
+  cal_status &= ~CALSTAT_APPLY;
+  cable_test_frequency=0; antenna_ui_measurement(); preview("cable-no-result");
+  antenna_ui_touch(180,295); assert(frequency1==300000000);
+  antenna_ui_touch(180,295); assert(frequency0==28000000 && antenna_cal_applied(0));
+  // HF CAL opens the existing ANT walkthrough; no ordinary-slot calibration.
+  antenna_ui_touch(420,295); preview("cable-ant-cal");
+  antenna_ui_touch(300,295); assert(capture_mask==1 && cal_stage==1);
+  antenna_ui_touch(30,295); assert(cal_stage==0 && frequency0==14000000);
+  assert(electrical_delayS11==123e-9f);
+  antenna_ui_touch(20,295); antenna_ui_touch(220,15);
+  antenna_ui_touch(30,295); // BACK -> picker.
+  assert(electrical_delayS11==123e-9f && frequency0==14000000);
+  assert(antenna_view_decode(config._reserved)==5);
+  antenna_ui_touch(220,15); antenna_ui_touch(420,15); // ANT -> band, then VNA.
+  assert(antenna_ui_draw() && electrical_delayS11==123e-9f && frequency0==14000000);
+  antenna_ui_touch(420,15); assert(!antenna_ui_draw());
+  antenna_mode_encode(config._reserved,true); antenna_view_encode(config._reserved,ANTENNA_VIEW_CABLE);
+  cable_writes=writes; antenna_ui_restore();
+  assert(writes==cable_writes && frequency0==28000000 && frequency1==29700000 && sweep_points==401);
+  preview("cable-restored");
+  antenna_ui_touch(420,15); assert(antenna_ui_draw());
+  antenna_ui_touch(420,15); assert(!antenna_ui_draw());
   puts("antenna UI transitions, mode persistence, favorites roller, bounds and rendering passed");
 }
 '''
 with tempfile.TemporaryDirectory() as d:
     tmp = Path(d)
     (tmp / 'nanovna.h').write_text(HEADER)
-    for name in ('ui/core/ui_core.h', 'ui/core/ui_menu_engine.h', 'ui/menus/menu_cal.h'):
+    for name in ('ui/core/ui_core.h', 'ui/core/ui_keypad.h', 'ui/core/ui_menu_engine.h', 'ui/menus/menu_cal.h', 'rf/analysis.h'):
         p = tmp / name
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text('#include "nanovna.h"\n')

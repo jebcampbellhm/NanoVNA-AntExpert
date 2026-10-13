@@ -127,6 +127,9 @@ void cell_printf(int x, int y, const char* fmt, ...) {
 void markmap_all_markers(void) {}
 
 #include "rf/analysis.h"
+// The firmware includes these static view/controller routines inside plot.c.
+// Include them here too so their actual size-optimized paths get exercised.
+#include "../../src/rf/legacy.c"
 
 static void test_match_quadratic_equation(void) {
   /*
@@ -242,6 +245,126 @@ static void test_parabolic_regression(void) {
   expect_float_close(0.5f, coeff[2], 1e-5f, "regression coeff c");
 }
 
+static void open_cable(float metres, float vf, float reflection) {
+  for (unsigned i=0; i<sweep_points; ++i) {
+    // Round trip phase of an open-ended uniform line. VF is a fraction here.
+    float phase = 4.0f * 3.14159265358979323846f * get_frequency(i) * metres /
+                  (299792458.0f * vf);
+    measured[0][i][0] = reflection * cosf(phase);
+    measured[0][i][1] = -reflection * sinf(phase);
+  }
+}
+static void test_cable_phase(void) {
+  const float lengths[] = {0.25f,1,3.48f,10,30.48f,100,500,1000};
+  const float factors[] = {0.66f,0.85f,1};
+  configure_sweep(SWEEP_POINTS_MAX,28000000,1700000.0f/(SWEEP_POINTS_MAX-1));
+  for(unsigned l=0;l<sizeof lengths/sizeof *lengths;++l)
+    for(unsigned v=0;v<sizeof factors/sizeof *factors;++v) {
+      open_cable(lengths[l],factors[v],0.8f);
+      float delay=cable_phase_delay(); CHECK(delay>0);
+      expect_float_close(lengths[l],delay*299792458.0f*factors[v]/2,
+                         lengths[l]*0.003f,"HF phase cable length");
+    }
+  // Realistic small phase ripple does not upset the delay fit or phase wraps.
+  open_cable(30.48f,0.66f,0.8f);
+  for(unsigned i=0;i<sweep_points;i++) {
+    float theta=0.005f*sinf(i*0.7f), re=measured[0][i][0], im=measured[0][i][1];
+    measured[0][i][0]=re*cosf(theta)-im*sinf(theta);
+    measured[0][i][1]=re*sinf(theta)+im*cosf(theta);
+  }
+  expect_float_close(30.48f,cable_phase_delay()*299792458.0f*0.66f/2,0.10f,"HF phase with ripple");
+  // Quarter-wave refinement can work on the narrow 30 m band and on 2 m.
+  configure_sweep(SWEEP_POINTS_MAX,10100000,50000.0f/(SWEEP_POINTS_MAX-1));
+  open_cable(299792458.0f*0.66f/(4*10125000),0.66f,1);
+  expect_float_close(1.0f/(2*10125000),cable_phase_delay(),1.5e-10f,"30 m quarter-wave delay");
+  configure_sweep(SWEEP_POINTS_MAX,144000000,4000000.0f/(SWEEP_POINTS_MAX-1));
+  open_cable(299792458.0f*0.66f/(4*145000000),0.66f,1);
+  expect_float_close(1.0f/(2*145000000),cable_phase_delay(),1e-11f,"2 m quarter-wave delay");
+  configure_sweep(SWEEP_POINTS_MAX,28000000,1700000.0f/(SWEEP_POINTS_MAX-1));
+  open_cable(0,0.66f,1); CHECK(cable_phase_delay()==0);
+  open_cable(-10,0.66f,1); CHECK(cable_phase_delay()==0);
+  open_cable(10,0.66f,0); CHECK(cable_phase_delay()==0);
+  open_cable(10,0.66f,0.1f); CHECK(cable_phase_delay()==0);
+  const uint32_t bad[]={0x7fc00000,0x7f800000,0xff800000,0x7f7fffff};
+  for(unsigned b=0;b<sizeof bad/sizeof *bad;++b) for(unsigned c=0;c<2;c++) {
+    open_cable(10,0.66f,1); memcpy(&measured[0][17][c],&bad[b],4);
+    CHECK(cable_phase_delay()==0);
+  }
+  // Curved/oscillating phase is not a simple cable; nearly aliased steps fail.
+  for(unsigned i=0;i<sweep_points;i++) {
+    float theta=2.0f*i/(sweep_points-1)+0.8f*sinf(i*0.15f);
+    measured[0][i][0]=cosf(theta); measured[0][i][1]=-sinf(theta);
+  }
+  CHECK(cable_phase_delay()==0);
+  configure_sweep(5,28000000,425000);
+  open_cable(110,0.66f,1); CHECK(cable_phase_delay()==0);
+  sweep_points=4; CHECK(cable_phase_delay()==0);
+  sweep_points=SWEEP_POINTS_MAX+1; CHECK(cable_phase_delay()==0);
+  sweep_points=SWEEP_POINTS_MAX; frequency1=frequency0; CHECK(cable_phase_delay()==0);
+  frequency1=frequency0-1; CHECK(cable_phase_delay()==0);
+}
+
+static void test_cable_length(void) {
+  configure_sweep(SWEEP_POINTS_MAX,50000,(50000000.0f-50000)/(SWEEP_POINTS_MAX-1));
+  const float lengths[] = {1.5f,3.0f,10.0f,20.0f};
+  const float factors[] = {0.66f,0.80f,0.85f};
+  for (unsigned l=0;l<sizeof lengths/sizeof *lengths;++l)
+    for (unsigned v=0;v<sizeof factors/sizeof *factors;++v) {
+      open_cable(lengths[l],factors[v],0.8f);
+      float f=cable_quarter_wave_frequency();
+      CHECK(f>0);
+      if(f>0) expect_float_close(lengths[l],299792458.0f*factors[v]/(4*f),
+                                 lengths[l]*0.015f,"open cable length");
+    }
+  // Standard VNA cable measurement and known-length/VF calculation are kept.
+  open_cable(10,0.66f,0.8f); velocity_factor=66; real_cable_len=0;
+  prepare_s11_cable(0,MEASURE_UPD_SWEEP);
+  expect_float_close(10,measure_cache.s11_cable.len,0.15f,"standard VNA cable length");
+  real_cable_len=10; prepare_s11_cable(0,MEASURE_UPD_SWEEP);
+  expect_float_close(66,measure_cache.s11_cable.vf,1,"standard VNA velocity factor");
+  real_cable_len=0;
+  // A short jumper has no quarter-wave crossing in the 50 MHz range.
+  open_cable(0.2f,0.66f,1); CHECK(cable_quarter_wave_frequency()==0);
+  configure_sweep(SWEEP_POINTS_MAX,50000,(300000000.0f-50000)/(SWEEP_POINTS_MAX-1));
+  open_cable(0.2f,0.66f,1); CHECK(cable_quarter_wave_frequency()>0);
+  configure_sweep(SWEEP_POINTS_MAX,50000,(5000000.0f-50000)/(SWEEP_POINTS_MAX-1));
+  open_cable(100,0.66f,0.8f);
+  float f=cable_quarter_wave_frequency(); CHECK(f>0);
+  if(f>0) expect_float_close(100,299792458.0f*0.66f/(4*f),0.5f,"long cable");
+  // A matched load, excessive attenuation, a bare OPEN and a SHORT-ended line.
+  open_cable(10,0.66f,0); CHECK(cable_quarter_wave_frequency()==0);
+  open_cable(10,0.66f,0.1f); CHECK(cable_quarter_wave_frequency()==0);
+  open_cable(0,0.66f,1); CHECK(cable_quarter_wave_frequency()==0);
+  open_cable(100,0.66f,-1); CHECK(cable_quarter_wave_frequency()==0);
+  // Sparse first lobe and a sweep beginning after the first quarter wave.
+  configure_sweep(5,50000,10000000);
+  open_cable(10,0.66f,1); CHECK(cable_quarter_wave_frequency()==0);
+  configure_sweep(SWEEP_POINTS_MAX,10000000,10000);
+  open_cable(3,0.66f,1); CHECK(cable_quarter_wave_frequency()==0);
+  configure_sweep(SWEEP_POINTS_MAX,50000,50000);
+  const uint32_t bad[] = {0x7fc00000u,0x7f800000u,0xff800000u};
+  for(unsigned b=0;b<3;++b) for(unsigned ch=0;ch<2;++ch) {
+    open_cable(30,0.66f,1); memcpy(&measured[0][2][ch],&bad[b],4);
+    CHECK(cable_quarter_wave_frequency()==0);
+  }
+  open_cable(30,0.66f,1);
+  measured[0][0][1]=0.001f; // Low-frequency noise must not become a huge length.
+  CHECK(cable_quarter_wave_frequency()>0);
+  frequency1=frequency0; CHECK(cable_quarter_wave_frequency()==0);
+  frequency1=frequency0-1; CHECK(cable_quarter_wave_frequency()==0);
+  configure_sweep(4,50000,100000); CHECK(cable_quarter_wave_frequency()==0);
+  sweep_points=SWEEP_POINTS_MAX+1; CHECK(cable_quarter_wave_frequency()==0);
+  configure_sweep(SWEEP_POINTS_MAX,0,50000); CHECK(cable_quarter_wave_frequency()==0);
+  configure_sweep(9,50000,50000);
+  for(unsigned i=0;i<9;i++) {
+    measured[0][i][0]=i<3?1:-1;
+    const float im[]={-0.05f,-0.3f,-0.6f,-0.8f,-0.6f,-0.3f,0,0.3f,0.6f};
+    measured[0][i][1]=im[i];
+  }
+  CHECK(cable_quarter_wave_frequency()==350000); // Exact-zero sample is valid.
+  measured[0][2][0]=1e30f; CHECK(cable_quarter_wave_frequency()==0);
+}
+
 int main(void) {
   memset(&config, 0, sizeof(config));
   config._measure_r = 50.0f;
@@ -251,6 +374,8 @@ int main(void) {
   test_search_peak_value_max();
   test_search_peak_value_min();
   test_parabolic_regression();
+  test_cable_length();
+  test_cable_phase();
 
   if (g_failures == 0) {
     puts("[PASS] tests/unit/test_legacy_measure");

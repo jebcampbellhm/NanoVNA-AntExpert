@@ -463,10 +463,14 @@ void lcd_set_font(int type);
 #define lcd_set_font(type) (void)(type)
 #endif
 
-extern const uint8_t numfont16x22[];
 #define NUM_FONT_GET_WIDTH      16
 #define NUM_FONT_GET_HEIGHT     22
+#ifdef NANOVNA_F303
+void numfont16x22_decode(uint8_t ch, uint8_t out[44]);
+#else
+extern const uint8_t numfont16x22[];
 #define NUM_FONT_GET_DATA(ch)   (&numfont16x22[ch*2*NUM_FONT_GET_HEIGHT])
+#endif
 
 // Glyph names from numfont16x22.c
 enum {

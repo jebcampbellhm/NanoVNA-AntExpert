@@ -82,6 +82,9 @@ enum {
   KM_BIN_NAME,
 #endif
 #endif
+#ifdef NANOVNA_F303
+  KM_ANT_CABLE_FREQ,
+#endif
   KM_NONE
 };
 
@@ -126,6 +129,9 @@ void ui_keypad_touch(int touch_x, int touch_y);
 
 // Callback
 void ui_keyboard_cb(uint16_t data, button_t* b);
+#ifdef NANOVNA_F303
+UI_KEYBOARD_CALLBACK(input_cable_frequency);
+#endif
 
 extern uint8_t keypad_mode;
 

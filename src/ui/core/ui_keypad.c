@@ -294,7 +294,7 @@ static void draw_numeric_input(const char* buf) {
   uint16_t y = LCD_HEIGHT - (NUM_FONT_GET_HEIGHT + NUM_INPUT_HEIGHT) / 2;
   uint16_t xsim;
 #ifdef __USE_RTC__
-  if ((1 << keypad_mode) & ((1 << KM_RTC_DATE) | (1 << KM_RTC_TIME)))
+  if (keypad_mode == KM_RTC_DATE || keypad_mode == KM_RTC_TIME)
     xsim = 0b01010100;
   else
 #endif
@@ -369,7 +369,7 @@ static int num_keypad_click(int c, int kp_index) {
     return K_DONE;
   }
 #ifdef __USE_RTC__
-  int maxlength = (1 << keypad_mode) & ((1 << KM_RTC_DATE) | (1 << KM_RTC_TIME)) ? 6 : NUMINPUT_LEN;
+  int maxlength = (keypad_mode == KM_RTC_DATE || keypad_mode == KM_RTC_TIME) ? 6 : NUMINPUT_LEN;
 #else
   int maxlength = NUMINPUT_LEN;
 #endif
