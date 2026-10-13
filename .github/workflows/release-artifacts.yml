@@ -186,7 +186,7 @@ jobs:
           fw_version='${{ steps.version.outputs.fw_version }}'
           dist_dir=dist
           mkdir -p "$dist_dir"
-          base_name="NanoVNA-X_${{ matrix.target }}_v${fw_version}"
+          base_name="NanoVNA-AntExpert_H4_v${fw_version}"
           for ext in bin hex; do
             cp "build/${project}.${ext}" "$dist_dir/${base_name}.${ext}"
           done
@@ -209,12 +209,12 @@ jobs:
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: |
-            dist/NanoVNA-X_${{ matrix.target }}_v${{ steps.version.outputs.fw_version }}.bin
-            dist/NanoVNA-X_${{ matrix.target }}_v${{ steps.version.outputs.fw_version }}.hex
-            dist/NanoVNA-X_${{ matrix.target }}_v${{ steps.version.outputs.fw_version }}.dfu
-            dist/NanoVNA-X_${{ matrix.target }}_v${{ steps.version.outputs.fw_version }}.bin.sha256
-            dist/NanoVNA-X_${{ matrix.target }}_v${{ steps.version.outputs.fw_version }}.hex.sha256
-            dist/NanoVNA-X_${{ matrix.target }}_v${{ steps.version.outputs.fw_version }}.dfu.sha256
+            dist/NanoVNA-AntExpert_H4_v${{ steps.version.outputs.fw_version }}.bin
+            dist/NanoVNA-AntExpert_H4_v${{ steps.version.outputs.fw_version }}.hex
+            dist/NanoVNA-AntExpert_H4_v${{ steps.version.outputs.fw_version }}.dfu
+            dist/NanoVNA-AntExpert_H4_v${{ steps.version.outputs.fw_version }}.bin.sha256
+            dist/NanoVNA-AntExpert_H4_v${{ steps.version.outputs.fw_version }}.hex.sha256
+            dist/NanoVNA-AntExpert_H4_v${{ steps.version.outputs.fw_version }}.dfu.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

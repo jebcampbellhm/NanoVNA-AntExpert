@@ -212,6 +212,7 @@ jobs:
             echo "commit=$(git rev-parse HEAD)"
             echo "target=$TARGET"
             echo "version=$(cat VERSION)"
+            echo "upstream_protocol_version=$(cat UPSTREAM_VERSION)"
             echo "compiler=$(arm-none-eabi-gcc --version | head -n 1)"
             echo "make_options=USE_LTO=yes"
             echo "run=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

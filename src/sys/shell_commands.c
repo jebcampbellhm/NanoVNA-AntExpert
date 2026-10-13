@@ -1094,7 +1094,8 @@ VNA_SHELL_FUNCTION(cmd_info) {
   shell_printf("Reset flags: %08x" VNA_SHELL_NEWLINE_STR, runtime_reset_flags);
 #endif
 }
-VNA_SHELL_FUNCTION(cmd_version) { shell_printf("%s" VNA_SHELL_NEWLINE_STR, NANOVNA_VERSION_STRING); }
+/* Keep upstream protocol capability numbering for NanoVNA-Saver scan detection. */
+VNA_SHELL_FUNCTION(cmd_version) { shell_printf("%s" VNA_SHELL_NEWLINE_STR, NANOVNA_PROTOCOL_VERSION_STRING); }
 #if ENABLE_COLOR_COMMAND
 VNA_SHELL_FUNCTION(cmd_color) {
   uint32_t color;

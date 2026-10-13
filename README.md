@@ -141,6 +141,24 @@ the linker must continue to protect saved calibration storage. Detailed
 prerequisites and USB DFU instructions are in [the build guide](doc/building.md).
 Firmware is flashed over USB DFU, not by putting a `.dfu` file on an SD card.
 
+## Versions and device information
+
+AntExpert uses its own semantic version, starting at **0.1.0**, from `VERSION`.
+Fix releases increment the patch number; feature releases increment the minor
+number. Release tags use `v0.1.0`, and release files use names such as
+`NanoVNA-AntExpert_H4_v0.1.0.dfu`.
+
+**CONFIG > VERSION** displays AntExpert's version, H4-only support, the Git
+revision, build date/time and `github.com/jebcampbellhm/NanoVNA-AntExpert`.
+The address is readable text, not a clickable device control. USB `info` includes
+the same details. A `-dirty` revision marks a build with tracked local changes.
+
+The USB `version` command deliberately retains the upstream protocol capability
+version **0.9.102**, recorded separately in `UPSTREAM_VERSION`. [NanoVNA-Saver uses version thresholds](https://github.com/NanoVNA-Saver/nanovna-saver/blob/main/src/NanoVNASaver/Hardware/NanoVNA.py)
+to choose scan commands; sending product version 0.1.0 there would
+make it treat the firmware as an older protocol. Board identification and the
+USB shell greeting retain their NanoVNA identity.
+
 ## Firmware checksums
 
 CI downloads now include `H4-SHA256SUMS.txt` and `H4-build-info.txt`, recording the

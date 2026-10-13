@@ -447,6 +447,7 @@ test: tests
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_snp_import.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_usb_control.py
 	$(HOST_PYTHON) tests/unit/test_flash_layout.py
+	$(HOST_PYTHON) tests/unit/test_version_info.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_roller_input.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_antenna_cal.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_mode_guidance.py
@@ -469,9 +470,10 @@ VERSION_HEADER := $(BUILDDIR)/generated/version_info.h
 
 PRE_MAKE_ALL_RULE_HOOK: $(VERSION_HEADER)
 
-$(VERSION_HEADER): VERSION | $(BUILDDIR)
-	@mkdir -p $(dir $@)
-	@printf '#pragma once\n#define NANOVNA_VERSION_STRING "%s"\n' "$(VERSION)" > $@
+.PHONY: FORCE_VERSION
+FORCE_VERSION:
+$(VERSION_HEADER): FORCE_VERSION VERSION UPSTREAM_VERSION tools/generate_version.py | $(BUILDDIR)
+	@$(HOST_PYTHON) tools/generate_version.py --version "$(VERSION)" --output "$@"
 
 flash: build/$(PROJECT).bin
 	dfu-util -d 0483:df11 -a 0 -s 0x08000000:leave -D build/$(PROJECT).bin

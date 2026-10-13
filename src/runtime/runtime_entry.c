@@ -193,8 +193,9 @@ static systime_t battery_next_sample = 0;
 
 // Version text, displayed in Config->Version menu, also send by info command
 const char* const info_about[] = {
-    "Board: " BOARD_NAME, "NanoVNA-X maintainer: @momentics <momentics@gmail.com>",
-    "Version: " NANOVNA_VERSION_STRING " ["
+    "Board: " BOARD_NAME, "AntExpert " NANOVNA_VERSION_STRING " H4 only / " ANTEXPERT_GIT_REVISION,
+    "github.com/jebcampbellhm/NanoVNA-AntExpert",
+    "Base: " NANOVNA_PROTOCOL_VERSION_STRING " ["
     "p:" define_to_STR(
         SWEEP_POINTS_MAX) ", "
                           "IF:" define_to_STR(
