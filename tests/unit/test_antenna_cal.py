@@ -175,14 +175,19 @@ int main(void) {
   config_service_init();
   frequency0=14000000; frequency1=14350000; sweep_points=101;
   current_props._power=3;
+  // Fingerprints of the published ANT1 grids, before sharing the UI endpoints.
+  // An FNV-style word hash guards the exact persisted frequency/index mapping.
+  const uint32_t grid_fingerprint[]={0x960fe1d7u,0x342c03a3u};
   for(unsigned p=0;p<2;++p) {
-    uint32_t prev=0;
+    uint32_t prev=0, fingerprint=2166136261u;
     for(unsigned i=0;i<401;++i) {
       uint32_t f=antenna_cal_frequency(p,i); assert(f>prev); prev=f;
+      fingerprint=(fingerprint^f)*16777619u;
       unsigned j; float k;
       assert(antenna_cal_bracket(p,f,&j,&k));
       assert((j==i && k==0) || (j+1==i && k==1));
     }
+    assert(fingerprint==grid_fingerprint[p]);
   }
   // HF coverage includes every endpoint with no interval above 10 kHz.
   const uint32_t hf[][2]={{1800000,2000000},{3500000,4000000},{5330600,5406400},
@@ -283,7 +288,7 @@ with tempfile.TemporaryDirectory() as d:
     for name in ('ch.h','hal.h','rf/sweep.h','driver/si5351.h','ui/core/ui_core.h','sys/event_bus.h'):
         p=tmp/name; p.parent.mkdir(parents=True,exist_ok=True); p.write_text('#include "nanovna.h"\n')
     (tmp/'test.c').write_text(HARNESS)
-    sources=['src/processing/antenna_cal_grid.c','src/processing/antenna_cal.c',
+    sources=['src/processing/antenna.c','src/processing/antenna_cal_grid.c','src/processing/antenna_cal.c',
              'src/processing/calibration.c','src/sys/config_service.c']
     command=shlex.split(os.environ.get('HOST_CC','cc'))
     subprocess.run(command+['-std=c11','-Wall','-Wextra','-Werror','-Wno-int-to-pointer-cast',

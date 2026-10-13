@@ -414,6 +414,10 @@ existing optimization. The numeric font uses a dictionary of 16-bit rows plus
 repeat counts; decoding writes one glyph to caller-owned stack storage, and all
 23 glyphs match the original pixels. Standard VNA features remain enabled.
 `tools/pack_numfont.py` regenerates the packed font from its retained original.
+Calibration and the band picker share one endpoint table to save flash; separate
+point counts and regression fingerprints preserve all 802 frequencies in the
+published HF/V/U grids. Changing preset endpoints also changes that calibration
+mapping and must be treated as a calibration-format change.
 
 Regression coverage includes synthetic cable lengths and velocity factors,
 HF/V/U band boundaries, missing/incompatible calibration, keypad cancellation,
