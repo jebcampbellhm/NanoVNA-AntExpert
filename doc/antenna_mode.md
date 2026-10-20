@@ -3,6 +3,56 @@
 For current operating instructions, see [the illustrated AntExpert guide](antenna_expert.md).
 Dated build results below are historical checkpoints, not the latest build status.
 
+## 2026-10-20 version 0.1.2 — WSL build and device verification
+
+- Version 0.1.2 built in WSL with Arm GNU 14.2.1 and LTO. The binary is
+  **116,504 bytes**, leaving **232 bytes** before calibration storage at
+  0x0801C800. Erase-page rounding also stays within that boundary. The WSL
+  build is larger than the prior Windows cross-build; this is the image flashed.
+- All 17 C suites and 17 Python harnesses pass with WSL GCC 15.2.0, including
+  the normal fast-math flags, and again with AddressSanitizer/UndefinedBehaviorSanitizer.
+  The Windows Clang infinity-test discrepancy does not reproduce under GCC.
+- A full 256 KiB device backup was taken. CubeProgrammer programmed only
+  firmware pages 0–56. Independent full readback exactly matches H4.bin, and
+  all 145,408 bytes from 0x0801C800 onward are byte-for-byte unchanged.
+- The H4 returned on COM13 and reports AntExpert 0.1.2. Two 101-point S11
+  snapshots returned finite data. The user confirmed normal sweeping and
+  responsive touch/roller controls. RF accuracy and recalibration are separate
+  checks: recapture V/U ANT for the new grid; HF from 0.1.0/0.1.1 can remain KEEP.
+- Flashed BIN SHA-256:
+  `d4c59d5208a35b14b13b745e106bec7e32f965b10f4b9609102ea613360cb4e3`.
+  Build, test, backup and readback records are in the local
+  `NanoVNA-X-builds/v0.1.2` directory. No GitHub release was published by this step.
+
+## 2026-10-19 development checkpoint (hardware validation pending)
+
+- Added minimum/selected-frequency R ± jX to ANT, correcting the shared S11
+  impedance/admittance conversion used by the ordinary VNA as well.
+- ANT can restore a VNA setup after accidental entry, including unsaved
+  calibration coefficients. Deliberate band/tuning use instead opens that exact
+  band with CH0 Smith and SWR traces. MULTI has a direct VNA button.
+- Appended EU868 (863–870 MHz) without moving the existing preset/view IDs.
+  902–928 MHz remains the 33 cm / US915 preset. V/U ANT's 401 points are spread
+  by segment bandwidth; HF's grid is unchanged. ANT1 magic, slot layout and
+  slot numbers are unchanged. Recapture V/U before relying on this build;
+  existing V/U coefficients are deliberately not auto-rejected. No 2.4 GHz
+  ANT preset or third calibration slot was added.
+- The H4 quarter-wave sine table uses 257 entries, saving 1,024 bytes while
+  retaining all FFT-1024 twiddles. Dense host checks measured maximum sine/cosine
+  error 9.01e-8 and norm error 1.91e-7; FFT and legacy measurement tests pass.
+- Windows Arm GNU 14.2.1 with LTO builds H4 at **115,400 bytes**, leaving
+  **1,336 bytes** before 0x0801C800. CCM uses 8,176/8,192 bytes; main SRAM's
+  unallocated tail is 368 bytes, with the existing stacks already reserved.
+  These are link-map figures, not runtime stack-watermark measurements.
+- All 17 C test executables pass with Windows Clang 23.1.3 / `-O2`; all
+  17 Python harnesses pass through the local Windows compiler adapter. UI and
+  impedance harnesses also exercise `-ffast-math`. Clang's full fast-math C run
+  fails an existing SWR infinity check; the same failure reproduces on unchanged
+  HEAD. GCC/WSL fast-math and sanitizer runs remain for the final validation.
+- Firmware-rendered screenshots use synthetic data. No hardware was flashed
+  and no release was published for this checkpoint. Final WSL build, device
+  tests and RF verification are pending.
+
 ## Release notes draft
 
 Add an H4-only ANTENNA entry to the root menu. It opens a 480 x 320 antenna
@@ -45,9 +95,10 @@ clamp to the start instead of wrapping to the end.
 - **CAL:** open the protected HF ANT / V/U ANT walkthrough. Capture OPEN, SHORT
   and 50-ohm LOAD for both selected profiles, then SAVE to internal slots 5/6.
   See the [current guide](antenna_expert.md#2-calibrate-hf-and-vhfuhf-together).
-- **VNA:** restore the prior frequency range, point count, frequency/time-domain
-  selection, reference impedance, and running/paused state. Calibration changes
-  made while in Antenna Mode remain available.
+- **VNA:** a direct return after accidental entry restores the previous VNA setup.
+  After deliberate band/tuning use, open that band with CH0 Smith and SWR traces.
+  Automatic MULTI scanning does not choose the return band; its header has a VNA
+  button. See the current guide for calibration and persistence details.
 - **Power-on mode:** entering ANTENNA saves Antenna as the startup mode; leaving
   with VNA saves VNA. Mode restoration runs after normal UI/plot initialization
   and does not write flash. Like favorites, mode changes save the whole device

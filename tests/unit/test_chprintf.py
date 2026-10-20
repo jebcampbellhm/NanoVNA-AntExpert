@@ -40,6 +40,12 @@ int main(void) {
   assert(!strcmp(s,"1/4: 6.97 m / 22.86 ft"));
   plot_printf(s,sizeof s,"%+.2f / %04u",-1.25,7u); assert(!strcmp(s,"-1.25 / 0007"));
   plot_printf(s,sizeof s,"%.4F",14000000.0); assert(!strcmp(s,"14M"));
+  plot_printf(s,sizeof s,"Z %.1f%+j.1f\x1e",50.0,25.0);
+  assert(!strcmp(s,"Z 50.0+j25.0\x1e"));
+  plot_printf(s,sizeof s,"Z %.1f%+j.1f\x1e",50.0,-25.0);
+  assert(!strcmp(s,"Z 50.0-j25.0\x1e"));
+  plot_printf(s,sizeof s,"Z %.1f%+j.1f\x1e",0.0,0.0);
+  assert(!strcmp(s,"Z 0.0+j0.0\x1e"));
   plot_printf(s,sizeof s,"%q",(uint32_t)14075000); assert(!strcmp(s,"14.075 000 M"));
   char guarded[]="xxxxxxxx";
   assert(plot_printf(guarded+1,4,"abcdef")==3);
@@ -62,7 +68,11 @@ with tempfile.TemporaryDirectory() as directory:
     (d / 'nanovna.h').write_text('#include "hal.h"\n#define S_MICRO "u"\n#define S_INFINITY "I"\n#define DIGIT_SEPARATOR \'.\'\n')
     (d / 'memstreams.h').write_text('''#include "hal.h"
 typedef struct { const struct StreamVMT *vmt; size_t eos; } MemoryStream;
-void msObjectInit(MemoryStream *,uint8_t *,size_t,size_t);
+#include <assert.h>
+static inline void msObjectInit(MemoryStream *s,uint8_t *b,size_t n,size_t e) {
+  (void)s; (void)b; (void)n; (void)e;
+  assert(!"plot_printf must not use the OS memory-stream adapter");
+}
 ''')
     (d / 'test.c').write_text(HARNESS)
     subprocess.run(shlex.split(os.environ.get('HOST_CC', 'cc')) + [

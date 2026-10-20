@@ -4,8 +4,13 @@
 
 **NanoVNA-H4 only: support current H4 hardware and make antenna tuning a little easier.**
 
-**Current version: 0.1.1** — adds calibrated cable-length measurement and
-quarter-/half-wave cable targets using the existing HF and V/U ANT profiles.
+**Current version: 0.1.2** — adds impedance readouts, context-aware ANT → VNA
+navigation, and EU868 coverage with redistributed V/U calibration points.
+Calibrated cable-length measurement and quarter-/half-wave targets remain available.
+
+Recalibrate
+**V/U ANT** after installing this build; its 401-point grid has changed. HF and
+the two-slot ANT1 storage format are unchanged. There is no 2.4 GHz ANT preset.
 
 This antenna firmware requires a **NanoVNA-H4 (STM32F303, 4-inch screen)**.
 Do not install the H4 image on a NanoVNA-H, V2/SAA-2, LiteVNA or other model.
@@ -37,12 +42,17 @@ uses the production help panel with a host-rendered menu outline.*
 1. From the normal VNA display, **tap the screen or press the roller** to open
    the main menu. Tap **ANTENNA** at the top.
 2. From an ANT single-band or TUNE screen, tap **VNA** in the upper-right corner.
-   From MULTI, tap a band card first, then **VNA** on its detail screen.
+   From MULTI, tap **VNA** in its top bar.
    From CABLE, tap **ANT** first to return to the previous band.
 3. **Your interface choice is saved between boots:** power off in ANT and it
    starts in ANT; switch to VNA and the next boot starts in VNA. This remembers
    the interface and the last ANT band sweep, MULTI HF or CABLE screen. Measurements
    start fresh; traces are not saved. Single-band sweeps start at 101 points.
+
+An accidental ANT visit followed by **VNA** restores the previous VNA setup.
+After selecting a band, turning the band roller or using TUNE/SWEEP, **VNA**
+opens that band's exact limits with **CH0 Smith (R+jX) and SWR** traces. Automatic
+MULTI scanning does not select a band for this purpose; tapping a card does.
 
 | Normal VNA: open the main menu, then ANTENNA | ANT: tap VNA at the upper right |
 | --- | --- |
@@ -61,14 +71,18 @@ Extra-class bandplan described in the [operating guide](doc/antenna_expert.md).
 - **Hardware selection on an unconfirmed H4 installation:** guidance for Direct,
   Div, Multi and ZeeTK, with an explicit **SAVE CONFIG** action.
 - **Two protected ANT calibration slots:** HF ANT and V/U ANT, each with **401
-  calibration points distributed among its amateur bands**, rather than evenly
+  calibration points distributed among its covered bands**, rather than evenly
   across a wide span. HF calibration spacing is at most **10 kHz within each band**.
-  OPEN, SHORT and LOAD can capture both profiles at each step. Upgrading from
-  the original ANT grid requires recalibration of both profiles. **Clear Config**
+  V/U includes **EU868 (863–870 MHz)** and **33 cm / US915 (902–928 MHz)**, with
+  bandwidth-weighted spacing of about **333–342 kHz** across its seven segments.
+  OPEN, SHORT and LOAD can capture both profiles at each step. Updating to 0.1.2
+  requires recalibrating V/U; HF from 0.1.0/0.1.1 can be kept. **Clear Config**
   erases both ANT slots along with the other saved settings and calibrations.
 - **Single-band SWR:** large minimum-SWR and frequency readouts, 2:1 and 3:1
   guides, bandwidth indication and 101/201/401 measurement-point selection.
-- **TUNE:** live SWR at a selected frequency, adjusted with the roller or touch
+  Impedance at the minimum appears as **R ± jX Ω**: resistance and signed
+  reactance (`+j` inductive, `-j` capacitive), using the existing ANT calibration.
+- **TUNE:** live SWR and impedance at a selected frequency, adjusted with the roller or touch
   buttons. Favorites, the ANT/VNA startup mode and the last ANT band/MULTI/CABLE screen are saved.
 - **MULTI HF:** eight cached mini plots for 80, 40, 30, 20, 17, 15, 12 and 10 m,
   each with minimum/maximum SWR. Tap a card for detail and **MULTI** to return.
@@ -112,6 +126,10 @@ selection, calibration coverage, controls and storage behavior.
 | Single-band sweep and MULTI shortcut | Fixed-frequency tuning |
 | --- | --- |
 | ![Single-band antenna sweep](doc/images/antenna-expert/sweep.png) | ![Tune screen](doc/images/antenna-expert/tune.png) |
+
+| V/U presets including EU868 | EU868 uses the V/U ANT profile |
+| --- | --- |
+| ![V/U band picker](doc/images/antenna-expert/vu-bands.png) | ![EU868 antenna sweep](doc/images/antenna-expert/eu868-sweep.png) |
 
 | CABLE: reuse HF ANT calibration | FREQ CAL: select the operating band |
 | --- | --- |

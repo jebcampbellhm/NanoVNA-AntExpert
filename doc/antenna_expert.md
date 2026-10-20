@@ -5,11 +5,11 @@ required.** Calibration profiles, hardware selection, favorites and ANT/VNA
 startup mode use internal flash. Other NanoVNA models are not supported by the AntExpert UI.
 Start with the [easy button-DFU flashing guide](flashing_h4.md).
 
-**Version 0.1.1** adds the CABLE screen described below. It reuses the 0.1.0 ANT
-calibration profiles without changing their grid or slot format. A normal
-code-only update does not require Clear Config or a new calibration when your
-connections and RF settings match. Earlier development grids are covered by the
-recalibration note in section 2.
+**Version 0.1.2** adds impedance readouts, band-aware VNA navigation, EU868
+and redistributed V/U calibration points. It retains the CABLE screen from
+0.1.1. Recalibrate V/U ANT after upgrading; HF from 0.1.0/0.1.1 can be kept.
+No Clear Config is needed. The ANT1 storage layout and slots 5/6 are unchanged;
+older V/U data is not automatically rejected.
 
 These illustrations are generated with the firmware font/rendering code and
 synthetic measurements. They show controls and layout, not expected antenna SWR.
@@ -25,9 +25,22 @@ continue to use slots 0–4.
 ![VNA main menu: ANTENNA is the top item](images/antenna-expert/vna-menu.png)
 
 Tap the VNA screen or press the roller, then choose **ANTENNA**. To return, tap
-**VNA** at the upper right of a single-band or TUNE screen. In MULTI, tap a band
-card to open that screen first.
+**VNA** at the upper right of a single-band or TUNE screen, or in MULTI's top bar.
 From CABLE, tap **ANT** to return to the last antenna band, then **VNA**.
+
+If you entered ANT accidentally, returning directly restores your prior VNA
+range, points, domain, reference impedance, traces, markers, calibration and
+running/paused state. Automatic MULTI scans do not change this choice. If your
+VNA calibration has unsaved coefficients, ANT retains them until a deliberate
+band/tuning action, avoiding an extra full calibration buffer in RAM.
+
+Select a band tile or MULTI card, turn the band roller, or use TUNE/SWEEP to
+make that band the VNA destination. **VNA** then opens the exact band limits,
+with CH0 Smith R+jX and SWR traces and a marker at the measured minimum (or the
+TUNE frequency). Extra frequency margins are omitted to stay inside calibration
+coverage. CH1 traces, marker-delta/tracking modes and VNA analysis overlays are disabled for that destination;
+all standard controls remain available afterward. This temporary VNA setup is
+not a calibration-slot save. The screen choice alone persists between boots.
 
 ![ANT single-band screen: VNA returns to the standard interface](images/antenna-expert/ant-return.png)
 
@@ -87,7 +100,7 @@ It is not 401 points per band and not one uniformly spaced sweep through the gap
 | Profile | Internal slot | Covered presets |
 | --- | --- | --- |
 | HF ANT | 5 | 160, 80/75, 60, 40, 30, 20, 17, 15, 12 and 10 m |
-| V/U ANT | 6 | 6 m, 2 m, 1.25 m, 70 cm, 33 cm and 23 cm |
+| V/U ANT | 6 | 6 m, 2 m, 1.25 m, 70 cm, EU868, 33 cm / US915 and 23 cm |
 
 HF uses **10 kHz maximum calibration spacing within each band**, including both
 endpoints. The 401 points are allocated as follows:
@@ -105,15 +118,31 @@ endpoints. The 401 points are allocated as follows:
 | 12 m | 11 | 10 kHz |
 | 10 m | 179 | About 9.55 kHz |
 
-The VHF/UHF profile retains its wider spacing; the 10 kHz limit applies only to
-HF band segments. This is calibration spacing, independent of the screen's
-measurement point count.
+V/U distributes its 401 points approximately by each segment's bandwidth:
 
-**Recalibrate after upgrading from the original development grid.** This revision
-keeps the ANT1 format and does not automatically reject existing profiles. Set
-**both profiles to CAPTURE** and repeat OPEN, SHORT and LOAD before relying on
-readings: existing HF coefficients belong to different frequencies. Normal VNA
-calibration slots are unaffected.
+| Preset | Frequency range | Calibration points | Spacing |
+| --- | --- | ---: | ---: |
+| 6 m | 50–54 MHz | 13 | 333.33 kHz |
+| 2 m | 144–148 MHz | 13 | 333.33 kHz |
+| 1.25 m | 222–225 MHz | 10 | 333.33 kHz |
+| 70 cm | 420–450 MHz | 89 | 340.91 kHz |
+| EU868 | 863–870 MHz | 22 | 333.33 kHz |
+| 33 cm / US915 | 902–928 MHz | 77 | 342.11 kHz |
+| 23 cm | 1240–1300 MHz | 177 | 340.91 kHz |
+
+The 10 kHz limit applies only to HF. Calibration spacing is independent of the
+screen's 101/201/401 measurement points. EU868 and US915 use the same V/U profile,
+including in CABLE's FREQ CAL mode. There is no third slot or 2.4 GHz ANT page.
+The regional spans follow the [LoRa Alliance regional parameters](https://resources.lora-alliance.org/technical-specifications/rp002-1-0-5-lorawan-regional-parameters).
+There is no calibration-slot boundary at 300 MHz; coefficient interpolation
+already handles RF harmonic transitions without blending across them.
+
+**After updating to 0.1.2, set V/U ANT to CAPTURE** and repeat OPEN, SHORT
+and LOAD, then SAVE. HF ANT can remain KEEP if it was calibrated with 0.1.0 or
+0.1.1 and the connections/RF settings still match. Set both to CAPTURE if updating
+from an earlier development grid or if the setup changed. The format is not
+revised and old V/U data is not auto-rejected: recalibration is required because
+its coefficients now map to different frequencies. Normal VNA slots are unaffected.
 
 The displayed slot numbers are the firmware's IDs; normal calibration slots
 0–4 remain available. Ordinary calibration saves and USB save commands cannot
@@ -165,8 +194,22 @@ metadata, and incompatible profiles must be captured again.
 **PTS** cycles 101, 201 and 401 measurement points. The power-on default is 101.
 The combined 60 m tile shows the five channel centers on one plot.
 
+**V/UHF** includes **EU868** (863–870 MHz); choose **33 cm / 915 MHz** for
+902–928 MHz. Both can be favorites and resume as the saved startup band.
+
+![V/U band picker including EU868](images/antenna-expert/vu-bands.png)
+
 - **MIN SWR** is the lowest sampled SWR and its frequency, not necessarily the
   zero-reactance resonance. Narrow dips between samples can be missed.
+- **Z** shows impedance at that same frequency, as resistance plus signed
+  reactance in ohms. For example, `Z 50.0-j25.0 Ω` means 50 ohms resistance
+  and 25 ohms capacitive reactance; `+j` means inductive reactance. Both values
+  update with the completed sweep and remain steady when paused. `Z --` means
+  no usable reading, an ideal open, or a component magnitude of 10,000 ohms or
+  more. The existing ANT OPEN/SHORT/LOAD calibration supplies this reading;
+  no extra calibration slot is needed. Without calibration, treat it as
+  approximate. It describes impedance at the calibration reference plane,
+  which may include the feedline, rather than necessarily at the antenna itself.
 - The plot has **2:1 and 3:1** guides and a 1–5 SWR scale. Higher values clip at
   the graph ceiling; the numeric value remains visible up to `99.9+`.
 - **2:1 width** describes the dip around the minimum. `>=` / `(edge)` means the
@@ -194,6 +237,11 @@ frequency by the displayed step. In TUNE the roller changes frequency, not band.
 The live readout uses the middle sample from a 21-point fixed-frequency capture;
 update speed still depends on RF bandwidth and settling. **SWEEP** returns to
 whole-band measurement.
+
+The **Z** line follows that same selected-frequency sample. Its signed reactance
+helps distinguish a capacitive (`-j`) load from an inductive (`+j`) one while
+tuning. It is reactance in ohms, not a measured capacitance in farads or
+inductance in henries.
 
 ## 5. Compare eight HF bands
 

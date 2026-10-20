@@ -9,6 +9,7 @@
 #include "ui/core/ui_keypad.h"
 #include "ui/core/ui_menu_engine.h"
 #include "ui/menus/menu_cal.h"
+#include "ui/draw/traces.h"
 #include "rf/analysis.h"
 #include <string.h>
 
@@ -27,25 +28,40 @@ static const uint8_t multi_bands[] = {1,3,4,5,6,7,8,9};
 static uint8_t cal_mask;
 static unsigned band = 5, group, page;
 static uint32_t favorites;
+static uint32_t load_favorites(void) {
+  return antenna_favorites_decode(config._reserved) |
+    ((config._vna_mode & VNA_MODE_EU868_FAVORITE_MASK) ? 1u<<ANTENNA_EU868_BAND : 0);
+}
 static bool favorites_only = true;
 static freq_t tune_frequency, expected_start, expected_stop;
-static freq_t saved_start, saved_stop;
-static uint16_t saved_points, saved_mode;
 static uint16_t antenna_points = 101;
-static uint8_t saved_sweep;
-static float saved_portz;
+// Automatic MULTI scans do not count as a deliberate band selection.
+static unsigned vna_band = ANTENNA_BAND_COUNT;
+static struct {
+  freq_t start, stop, cal_start, cal_stop;
+  float portz, load_r;
+  uint32_t magic, reserved[5];
+  const properties_t *cal;
+  marker_t marker[MARKERS_MAX];
+  uint16_t points, mode, cal_points, cal_flags, slot;
+  uint8_t power, old_cal_power, sweep;
+} saved __attribute__((section(".ccm")));
+_Static_assert(sizeof saved <= 148, "VNA return state exceeds spare CCM");
 /* CPU-only cache: CCM is not DMA-accessible. Written in full before valid=true;
  * this NOLOAD section is intentionally not initialized by the startup code. */
 static union {
   float cable_delay;
-  float curve[SWEEP_POINTS_MAX];
+  struct {
+    float curve[SWEEP_POINTS_MAX];
+    char impedance[24];
+  } single;
   struct {
     uint8_t y[8][MULTI_POINTS]; // 0..64 graph coordinates; 255 means invalid.
     float low[8], high[8];
     uint8_t ready, calibrated, incomplete;
   } overview;
 } cache __attribute__((section(".ccm")));
-#define curve cache.curve
+#define curve cache.single.curve
 static uint16_t count;
 static antenna_result_t result;
 
@@ -92,6 +108,7 @@ UI_KEYBOARD_CALLBACK(input_cable_frequency) {
   if (f < 50000) f = 50000;
   if (f > FREQUENCY_MAX) f = FREQUENCY_MAX;
   cable_target = f;
+  vna_band = band;
   cable_range = cable_target_band() < ANTENNA_BAND_COUNT ? 1 : 0;
   apply_range();
 }
@@ -139,10 +156,14 @@ static void apply_range(void) {
   current_props._portz = 50;
   if (cable) {
     electrical_delayS11 = 0;
-    if (cable_range < 2 && !antenna_cal_load(cal_band >= 10)) cal_status &= ~CALSTAT_APPLY;
+    if (cable_range < 2 && (vna_band < ANTENNA_BAND_COUNT || saved.cal) &&
+        !antenna_cal_load(cal_band >= 10)) cal_status &= ~CALSTAT_APPLY;
     // Phase measurements stay within a covered band; wide sweeps need ordinary CAL.
     if (!cable_calibrated()) cal_status &= ~CALSTAT_APPLY;
-  } else antenna_cal_load(band >= 10);
+  } else if (vna_band < ANTENNA_BAND_COUNT || saved.cal)
+    antenna_cal_load(band >= 10);
+  // If the previous VNA calibration is unsaved, retain its coefficients until
+  // a deliberate band/tuning action. There is no RAM for a second full table.
   sweep_mode |= SWEEP_ENABLE;
   valid = false; multi_next = false;
   app_measurement_update_frequencies();
@@ -160,7 +181,8 @@ static void cable_leave(void) {
   electrical_delayS11 = cable_old_delay;
 }
 static void save_mode(bool enabled) {
-  unsigned view = cable ? ANTENNA_VIEW_CABLE : multi ? ANTENNA_VIEW_MULTI : band;
+  unsigned view = cable ? ANTENNA_VIEW_CABLE : multi ? ANTENNA_VIEW_MULTI :
+                  band == ANTENNA_EU868_BAND ? ANTENNA_VIEW_EU868 : band;
   if (antenna_mode_decode(config._reserved) == enabled &&
       (!enabled || antenna_view_decode(config._reserved) == view)) return;
   uint8_t old[3]; memcpy(old,config._reserved,3);
@@ -172,35 +194,64 @@ static void save_mode(bool enabled) {
   }
 }
 void antenna_ui_enter(uint16_t data) {
-  (void)data;
   if (!active) {
-    saved_start = frequency0; saved_stop = frequency1;
-    saved_points = sweep_points; saved_mode = props_mode;
-    saved_sweep = sweep_mode & SWEEP_ENABLE; saved_portz = current_props._portz;
-    favorites = antenna_favorites_decode(config._reserved);
+    saved.start = frequency0; saved.stop = frequency1;
+    saved.points = sweep_points; saved.mode = props_mode;
+    saved.sweep = sweep_mode; saved.portz = current_props._portz;
+    saved.magic = current_props.magic; saved.power = current_props._power;
+    saved.cal_start = cal_frequency0; saved.cal_stop = cal_frequency1;
+    saved.cal_points = cal_sweep_points; saved.cal_flags = cal_status;
+    saved.old_cal_power = cal_power; saved.load_r = cal_load_r; saved.slot = lastsaveid;
+    memcpy(saved.marker,markers,sizeof saved.marker);
+    memcpy(saved.reserved,current_props._reserved1,sizeof saved.reserved);
+    saved.cal = get_properties(lastsaveid);
+    if (saved.cal && memcmp(saved.cal->_cal_data,cal_data,sizeof cal_data)) saved.cal = NULL;
+    favorites = load_favorites();
   }
   unsigned view = antenna_view_decode(config._reserved);
+  unsigned view_band = view == ANTENNA_VIEW_EU868 ? ANTENNA_EU868_BAND : view;
+  if (!active || data)
+    vna_band = data && view != ANTENNA_VIEW_MULTI && view != ANTENNA_VIEW_CABLE ? view_band : ANTENNA_BAND_COUNT;
   if (cable) cable_leave();
   active = true; picker = false; tuning = false; multi = false;
   ui_mode_normal();
   if (view == ANTENNA_VIEW_MULTI) multi_enter();
   else if (view == ANTENNA_VIEW_CABLE) cable_enter();
-  else { band = view; apply_range(); }
+  else { band = view_band; apply_range(); }
   save_mode(true);
 }
 void antenna_ui_restore(void) {
   // Configuration and the normal UI/plot must be initialized first. Restoring
   // the already-saved mode must not write flash on every power cycle.
-  if (antenna_mode_decode(config._reserved)) antenna_ui_enter(0);
+  if (antenna_mode_decode(config._reserved)) antenna_ui_enter(1);
 }
 static void leave(void) {
   if (cable) cable_leave();
   active = false;
-  frequency0 = saved_start; frequency1 = saved_stop; sweep_points = saved_points;
-  props_mode = (props_mode & ~(DOMAIN_MODE | TD_CENTER_SPAN)) |
-               (saved_mode & (DOMAIN_MODE | TD_CENTER_SPAN));
-  current_props._portz = saved_portz;
-  sweep_mode = (sweep_mode & ~SWEEP_ENABLE) | saved_sweep;
+  if (vna_band < ANTENNA_BAND_COUNT) {
+    const antenna_band_t *b = &antenna_bands[vna_band];
+    freq_t f = band == vna_band && !multi && valid && range_matches() ?
+               get_frequency(result.minimum) : b->start+(b->stop-b->start)/2;
+    band = vna_band; multi = tuning = picker = false; apply_range();
+    props_mode &= ~(TD_MARKER_TRACK | TD_MARKER_DELTA);
+    for (unsigned i=0;i<TRACES_MAX;i++) set_trace_enable(i,i<2);
+    set_trace_type(0,TRC_SMITH,0); set_trace_scale(0,1); set_trace_refpos(0,0);
+    trace[0].smith_format = MS_RX;
+    set_trace_type(1,TRC_SWR,0); set_trace_scale(1,0.5f); set_trace_refpos(1,0);
+    set_active_trace(0); current_props._measure = MEASURE_NONE;
+    for (unsigned i=0;i<MARKERS_MAX;i++) markers[i].enabled = i==0;
+    markers[0].frequency = f; active_marker = 0;
+  } else {
+    frequency0 = saved.start; frequency1 = saved.stop; sweep_points = saved.points;
+    props_mode = saved.mode; current_props._portz = saved.portz; sweep_mode = saved.sweep;
+    current_props.magic = saved.magic; current_props._power = saved.power;
+    cal_frequency0 = saved.cal_start; cal_frequency1 = saved.cal_stop;
+    cal_sweep_points = saved.cal_points; cal_status = saved.cal_flags;
+    cal_power = saved.old_cal_power; cal_load_r = saved.load_r; lastsaveid = saved.slot;
+    memcpy(markers,saved.marker,sizeof saved.marker);
+    memcpy(current_props._reserved1,saved.reserved,sizeof saved.reserved);
+    if (saved.cal) memcpy(cal_data,saved.cal->_cal_data,sizeof cal_data);
+  }
   app_measurement_update_frequencies(); redraw();
   save_mode(false);
 }
@@ -221,7 +272,7 @@ static void multi_enter(void) {
   band = multi_bands[0]; apply_range();
 }
 static void multi_open(unsigned card) {
-  band = multi_bands[card]; multi = multi_next = false; apply_range();
+  vna_band = band = multi_bands[card]; multi = multi_next = false; apply_range();
 }
 void antenna_ui_measurement(void) {
   if (!active || !range_matches()) { valid = false; return; }
@@ -267,6 +318,21 @@ void antenna_ui_measurement(void) {
     result.minimum = count/2; result.swr = curve[count/2];
     result.valid = result.swr >= 1;
   }
+  // Capture Z with the completed trace, before the next sweep overwrites S11.
+  // Format once per capture, not once per LCD strip.
+  strcpy(cache.single.impedance,"Z --");
+  if (result.valid) {
+    const float *v = measured[0][result.minimum];
+    float re = 1-v[0], d = re*re+v[1]*v[1];
+    // Avoid a singular/overflowing conversion (especially with fast math).
+    // This excludes only extreme Z or unusable S11, outside our display range.
+    if (d >= 1e-8f && d <= 1e8f) {
+      float r = resistance(result.minimum,v), x = reactance(result.minimum,v);
+      if (r > -10000 && r < 10000 && x > -10000 && x < 10000)
+        plot_printf(cache.single.impedance,sizeof cache.single.impedance,
+                    "Z %.1f%+j.1f" S_OHM,r,x);
+    }
+  }
   valid = result.valid;
 }
 static unsigned band_list(uint8_t *list) {
@@ -295,7 +361,8 @@ static void draw_picker(void) {
     int x = (j%2)*240, y = 88+(j/2)*58;
     button("",x,y,240,54);
     label(s,x+8,y+16,2);
-    uint32_t mhz = ((uint64_t)antenna_bands[i].start+antenna_bands[i].stop+1000000)/2000000;
+    uint32_t mhz = i == ANTENNA_EU868_BAND ? 868 :
+      ((uint64_t)antenna_bands[i].start+antenna_bands[i].stop+1000000)/2000000;
     plot_printf(s,sizeof(s),"%u MHz",mhz);
     unsigned width = 0;
     for (const char *p = s; *p; ++p) width += FONT_GET_WIDTH((uint8_t)*p)*2;
@@ -340,8 +407,7 @@ static void draw_multi(void) {
   char s[40];
   label("HF MULTI",8,3,2);
   label("51 PTS  MHz  SWR 1-5",8,26,1);
-  label("2:1 / 3:1",188,6,1);
-  label("Tap a band",188,23,1);
+  button("VNA",180,0,100,38);
   button((sweep_mode & SWEEP_ENABLE) ? "PAUSE" : "RUN",280,0,100,38);
   button("BANDS",380,0,100,38);
   for (unsigned k=0; k<8; ++k) {
@@ -476,6 +542,7 @@ static void draw_strip(void) {
   if (!range_matches()) label("Range changed: tap SWEEP",fx,123,1);
   else if (!ready) label((sweep_mode & SWEEP_ENABLE) ? "Measuring..." : "Paused",fx,123,1);
   else label(tuning ? "At selected frequency" : "Lowest sampled SWR",fx,123,1);
+  label(ready ? cache.single.impedance : "Z --",190,140,2);
   if (tuning) {
     button("- FREQ",16,173,190,58); button("+ FREQ",274,173,190,58);
     uint32_t step = (antenna_bands[band].stop-antenna_bands[band].start)/200;
@@ -552,6 +619,7 @@ bool antenna_ui_draw(void) {
   return true;
 }
 static void tune_step(bool up) {
+  vna_band = band;
   const antenna_band_t *b = &antenna_bands[band];
   freq_t step = (b->stop-b->start)/200;
   if (step < 10) step = 10;
@@ -622,15 +690,15 @@ bool antenna_ui_touch(int x, int y) {
   if (picker) {
     uint8_t list[ANTENNA_BAND_COUNT]; unsigned n = band_list(list);
     if (y < 36 && x < 170) multi_enter();
-    else if (y < 36 && x < 300) cable_enter();
+    else if (y < 36 && x < 300) { vna_band = band; cable_enter(); }
     else if (y < 36) {
       antenna_points = antenna_points == 101 ? 201 : (antenna_points == 201 ? 401 : 101);
-      tuning = false; apply_range();
+      vna_band = band; tuning = false; apply_range();
     }
     else if (y >= 38 && y < 80) { group = x/160; page = 0; }
     else if (y >= 88 && y < 258) {
       unsigned j = page*6 + ((y-88)/58)*2 + x/240;
-      if (j < n) { band = list[j]; picker = false; tuning = false; apply_range(); }
+      if (j < n) { vna_band = band = list[j]; picker = false; tuning = false; apply_range(); }
     } else if (y >= 276) {
       if (x < 120 && page) --page;
       else if (x < 240 && x >= 120 && (page+1)*6 < n) ++page;
@@ -638,19 +706,26 @@ bool antenna_ui_touch(int x, int y) {
     }
   } else if (multi) {
     if (y<40 && x>=380) {
-      multi_open(multi_selected); picker=true; page=0;
+      band=multi_bands[multi_selected]; multi=multi_next=false;
+      picker=true; page=0; apply_range();
     } else if (y<40 && x>=280) {
       if (!range_matches()) apply_range();
       else sweep_mode ^= SWEEP_ENABLE;
       sweep_mode &= ~SWEEP_ONCE;
+    } else if (y<40 && x>=180) {
+      leave();
     } else if (y>=40) multi_open((y-40)/140*4+x/120);
   } else if (y < 36 && x >= 380) leave();
   else if (y < 36 && x >= 335) {
     uint8_t old[3]; memcpy(old,config._reserved,3);
+    uint16_t old_mode = config._vna_mode;
     favorites ^= 1u<<band;
     antenna_favorites_encode(config._reserved,favorites);
+    config._vna_mode = (config._vna_mode & ~VNA_MODE_EU868_FAVORITE_MASK) |
+      ((favorites & (1u<<ANTENNA_EU868_BAND)) ? VNA_MODE_EU868_FAVORITE_MASK : 0);
     if (config_save() != 0) {
-      memcpy(config._reserved,old,3); favorites = antenna_favorites_decode(old);
+      config._vna_mode = old_mode;
+      memcpy(config._reserved,old,3); favorites = load_favorites();
       ui_message_box("Favorites","Save failed",1000);
     }
   } else if (y < 36 && x >= 250) {
@@ -659,15 +734,18 @@ bool antenna_ui_touch(int x, int y) {
   } else if (y >= 276) {
     if (x < 120) { picker = true; page = 0; }
     else if (x < 240) {
+      vna_band = band;
       if (tuning || !range_matches()) { tuning = false; apply_range(); }
       else if (sweep_mode & SWEEP_ENABLE) sweep_mode &= ~(SWEEP_ENABLE | SWEEP_ONCE);
       else sweep_mode |= SWEEP_ENABLE;
     }
     else if (x < 360) {
+      vna_band = band;
       if (!tuning) tune_frequency = valid && range_matches() ? get_frequency(result.minimum) :
                    antenna_bands[band].start+(antenna_bands[band].stop-antenna_bands[band].start)/2;
       tuning = true; apply_range();
     } else {
+      vna_band = band;
       tuning=false; cal_page=true; cal_mask=3;
     }
   } else if (band < 10 && !tuning && x >= 380 && y >= 82 && y < 136) {
@@ -698,7 +776,7 @@ bool antenna_ui_lever(uint16_t status) {
       next = (next + ((status & EVT_UP) ? 1 : ANTENNA_BAND_COUNT-1)) % ANTENNA_BAND_COUNT;
       if (!favorites_only || (favorites & (1u<<next))) {
         if (next != band || tuning || picker) {
-          band = next; picker = tuning = false; apply_range();
+          vna_band = band = next; picker = tuning = false; apply_range();
         }
         break;
       }

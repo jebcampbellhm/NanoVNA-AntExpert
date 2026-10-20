@@ -40,7 +40,9 @@
 // 3. Test overrides
 #undef USE_VARIABLE_OFFSET
 // #warning "Using STUB nanovna.h"
+#ifndef FFT_SIZE
 #define FFT_SIZE 512
+#endif
 
 // 4. Globals
 extern properties_t current_props;

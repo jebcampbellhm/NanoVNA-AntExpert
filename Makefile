@@ -379,7 +379,8 @@ TEST_SUITES := $(TEST_BUILD_DIR)/test_common $(TEST_BUILD_DIR)/test_vna_math \
                $(TEST_BUILD_DIR)/test_shell_service $(TEST_BUILD_DIR)/test_display_presenter \
                $(TEST_BUILD_DIR)/test_accuracy_analysis $(TEST_BUILD_DIR)/test_si5351 \
                $(TEST_BUILD_DIR)/test_si5351_h4 $(TEST_BUILD_DIR)/test_antenna \
-               $(TEST_BUILD_DIR)/test_legacy_measure_h4 $(TEST_BUILD_DIR)/test_common_h4
+               $(TEST_BUILD_DIR)/test_legacy_measure_h4 $(TEST_BUILD_DIR)/test_common_h4 \
+               $(TEST_BUILD_DIR)/test_vna_math_h4
 
 $(TEST_BUILD_DIR)/test_antenna: tests/unit/test_antenna.c src/processing/antenna.c | $(TEST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -Iinclude -o $@ $^ $(HOST_LDFLAGS)
@@ -395,6 +396,9 @@ $(TEST_BUILD_DIR)/test_common_h4: tests/unit/test_common.c src/core/common.c | $
 
 $(TEST_BUILD_DIR)/test_vna_math: tests/unit/test_vna_math.c src/processing/vna_math.c | $(TEST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -DNANOVNA_HOST_TEST -Itests/stubs -Iinclude -Isrc -o $@ $^ $(HOST_LDFLAGS)
+
+$(TEST_BUILD_DIR)/test_vna_math_h4: tests/unit/test_vna_math.c src/processing/vna_math.c | $(TEST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -DNANOVNA_HOST_TEST -DNANOVNA_F303 -DFFT_SIZE=1024 -Itests/stubs -Iinclude -Isrc -o $@ $^ $(HOST_LDFLAGS)
 
 $(TEST_BUILD_DIR)/test_measurement_pipeline: tests/unit/test_measurement_pipeline.c \
 		src/rf/pipeline.c | $(TEST_BUILD_DIR)
@@ -452,6 +456,7 @@ test: tests
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_irq_wrappers.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_sweep_snapshot.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_antenna_ui.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_impedance.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_chprintf.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_keypad.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_numfont.py

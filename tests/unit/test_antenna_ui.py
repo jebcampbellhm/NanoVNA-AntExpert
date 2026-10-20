@@ -8,6 +8,7 @@ import os
 import shlex
 import subprocess
 import tempfile
+from impedance_fixture import trace_math
 
 ROOT = Path(__file__).resolve().parents[2]
 runtime = (ROOT / 'src/runtime/runtime_entry.c').read_text()
@@ -21,6 +22,7 @@ HEADER = r'''
 #define NANOVNA_F303 1
 #define SWEEP_POINTS_MAX 401
 #define SPEED_OF_LIGHT 299792458.0f
+#define S_OHM "\x1e"
 #define FREQUENCY_MAX 2700000000U
 extern uint8_t velocity_factor;
 extern float electrical_delayS11;
@@ -31,11 +33,34 @@ float cable_phase_delay(void);
 #define SWEEP_ONCE 2
 #define DOMAIN_MODE 1
 #define TD_CENTER_SPAN 64
+#define TD_MARKER_TRACK 128
+#define TD_MARKER_DELTA 256
 #define CALSTAT_ED 1
 #define CALSTAT_ES 32
 #define CALSTAT_ER 64
 #define CALSTAT_APPLY 256
 #define CALSTAT_INTERPOLATED 512
+#define TRACES_MAX 4
+#define MARKERS_MAX 8
+#define TRC_SMITH 3
+#define TRC_SWR 6
+#define MS_RX 3
+#define MEASURE_NONE 0
+#define NO_SAVE_SLOT 65535
+typedef struct { uint8_t enabled,type,channel,smith_format; float scale,refpos; } trace_t;
+typedef struct { uint8_t enabled,reserved; uint16_t index; uint32_t frequency; } marker_t;
+extern trace_t trace[TRACES_MAX];
+extern marker_t markers[MARKERS_MAX];
+extern int active_marker;
+extern uint8_t cal_power;
+extern uint16_t lastsaveid;
+extern uint16_t cal_sweep_points;
+extern float cal_load_r;
+void set_trace_enable(int,bool);
+void set_trace_type(int,int,int);
+void set_trace_scale(int,float);
+void set_trace_refpos(int,float);
+void set_active_trace(int);
 #define REDRAW_ALL 65535
 #define LCD_FG_COLOR 1
 #define LCD_BG_COLOR 0
@@ -70,9 +95,15 @@ extern uint32_t frequency0, frequency1, cal_frequency0, cal_frequency1;
 extern uint16_t sweep_points, props_mode, cal_status;
 extern uint8_t sweep_mode, ui_mode;
 #define VNA_MODE_RF_CONFIRMED_MASK 0x8000u
+#define VNA_MODE_EU868_FAVORITE_MASK 0x4000u
 extern struct config_stub { uint8_t _reserved[3]; uint16_t _vna_mode; } config;
-typedef struct props_stub { float _portz; uint32_t magic, _reserved1[5]; } properties_t;
+typedef struct props_stub {
+  float _portz; uint32_t magic, _reserved1[5]; uint8_t _power,_measure;
+  float _cal_data[5][401][2];
+} properties_t;
 extern struct props_stub current_props;
+#define cal_data current_props._cal_data
+const properties_t *get_properties(uint32_t);
 #define CAL_TYPE_COUNT 5
 extern float measured[2][401][2];
 void request_to_redraw(uint16_t mask);
@@ -82,6 +113,8 @@ void lcd_set_colors(int,int);
 void lcd_set_foreground(int);
 void lcd_clear_screen(void);
 int host_printf(char *,size_t,const char *,...);
+float resistance(int,const float *);
+float reactance(int,const float *);
 #define plot_printf host_printf
 void app_measurement_update_frequencies(void);
 void ui_mode_normal(void);
@@ -104,6 +137,7 @@ HARNESS = r'''
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 uint32_t frequency0=1000000, frequency1=30000000, cal_frequency0, cal_frequency1;
 uint16_t sweep_points=101, props_mode=DOMAIN_MODE|TD_CENTER_SPAN, cal_status;
 uint8_t sweep_mode=0, ui_mode=UI_MENU, velocity_factor=66;
@@ -114,6 +148,21 @@ float cable_quarter_wave_frequency(void) { return cable_test_frequency; }
 float cable_phase_delay(void) { return cable_test_delay; }
 struct config_stub config={._vna_mode=VNA_MODE_RF_CONFIRMED_MASK};
 struct props_stub current_props={._portz=75};
+static properties_t vna_saved;
+static bool vna_saved_valid;
+const properties_t *get_properties(uint32_t slot) { return slot==0 && vna_saved_valid ? &vna_saved : NULL; }
+trace_t trace[TRACES_MAX];
+marker_t markers[MARKERS_MAX];
+int active_marker;
+uint8_t cal_power;
+uint16_t lastsaveid=NO_SAVE_SLOT;
+uint16_t cal_sweep_points;
+float cal_load_r=50;
+void set_trace_enable(int t,bool v) { trace[t].enabled=v; }
+void set_trace_type(int t,int type,int channel) { trace[t].type=type; trace[t].channel=channel; }
+void set_trace_scale(int t,float scale) { trace[t].scale=scale; }
+void set_trace_refpos(int t,float refpos) { trace[t].refpos=refpos; }
+void set_active_trace(int t) { assert(t==0); }
 float measured[2][401][2];
 const menuitem_t menu_cal_menu[]={1};
 static unsigned writes, messages, updates, menus;
@@ -121,7 +170,14 @@ static bool fail_save;
 static const char *want_min, *want_max;
 static bool saw_min, saw_max;
 int host_printf(char *s,size_t size,const char *fmt,...) {
-  va_list ap; va_start(ap,fmt); int n=vsnprintf(s,size,fmt,ap); va_end(ap);
+  va_list ap; va_start(ap,fmt); int n;
+  // libc lacks the firmware's complex-number j flag. Its actual formatter is
+  // checked separately by test_chprintf.py, including this exact format.
+  if (!strcmp(fmt,"Z %.1f%+j.1f" S_OHM)) {
+    double r=va_arg(ap,double), x=va_arg(ap,double);
+    n=snprintf(s,size,"Z %.1f%cj%.1f" S_OHM,r,x<0?'-':'+',fabs(x));
+  } else n=vsnprintf(s,size,fmt,ap);
+  va_end(ap);
   if(want_min && strcmp(s,want_min)==0) saw_min=true;
   if(want_max && strcmp(s,want_max)==0) saw_max=true;
   return n;
@@ -139,6 +195,9 @@ bool antenna_cal_load(unsigned p) {
   assert(p<2);
   if(!saved_profiles[p]) return false;
   current_props.magic=0x414e5431; current_props._reserved1[0]=p;
+  current_props._power=2; cal_power=2; cal_sweep_points=401; lastsaveid=5+p;
+  for(unsigned t=0;t<5;t++) for(unsigned i=0;i<401;i++)
+    for(unsigned c=0;c<2;c++) cal_data[t][i][c]=100+p;
   cal_frequency0=p?50000000:1800000; cal_frequency1=p?1300000000:29700000;
   cal_status=CALSTAT_APPLY|CALSTAT_ED|CALSTAT_ES|CALSTAT_ER;
   return true;
@@ -233,6 +292,30 @@ static void sample(void) {
   }
   antenna_ui_measurement();
 }
+static void impedance_sample(float r,float x,unsigned index) {
+  // Give one index a known impedance and all other samples a higher SWR.
+  for (unsigned i=0;i<sweep_points;i++) {
+    measured[0][i][0]=1; measured[0][i][1]=0;
+  }
+  float d=(r+50)*(r+50)+x*x;
+  measured[0][index][0]=(r*r+x*x-2500)/d;
+  measured[0][index][1]=100*x/d;
+  antenna_ui_measurement();
+}
+static void expect_impedance(const char *text) {
+  assert(antenna_ui_draw());
+  int x=190;
+  while (*text) {
+    unsigned ch=(unsigned char)*text++;
+    const uint8_t *glyph=FONT_GET_DATA(ch);
+    unsigned width=FONT_GET_WIDTH(ch);
+    assert(x+2*width<=480);
+    for(unsigned row=0;row<22;row++) for(unsigned col=0;col<2*width;col++)
+      assert(pixels[140+row][x+col]==((glyph[row/2]&(0x80>>(col/2)))?1:0));
+    x+=2*width;
+  }
+  for(unsigned row=140;row<162;row++) for(unsigned col=x;col<480;col++) assert(pixels[row][col]==0);
+}
 int main(void) {
   assert(!antenna_ui_draw()); assert(!antenna_ui_touch(10,10));
   antenna_ui_restore(); assert(!antenna_ui_draw() && writes==0);
@@ -240,7 +323,7 @@ int main(void) {
   assert(writes==1 && antenna_mode_decode(config._reserved));
   assert(frequency0==14000000 && frequency1==14350000 && sweep_points==101);
   assert(current_props._portz==50 && !(props_mode&DOMAIN_MODE) && sweep_mode==1);
-  preview("waiting"); sample(); preview("sweep");
+  preview("waiting"); expect_impedance("Z --"); sample(); preview("sweep");
   // 20 m Extra CW/data ends at 14.150 MHz, 181 pixels into this 350 kHz span.
   for(unsigned y=264;y<269;y++) {
     assert(pixels[y][41]==0 && pixels[y][42]==3);
@@ -255,6 +338,32 @@ int main(void) {
   assert(strip_transfers==transfers_before+40 && next_strip==0);
   assert(memcmp(previous,pixels,sizeof(pixels))==0);
   assert(pixels[300][238]==1); // Filled RUNNING button.
+  // Z and the displayed frequency must refer to the same minimum-SWR sample.
+  impedance_sample(50,25,17);
+  want_min="14.05950 MHz"; saw_min=false;
+  preview("sweep-impedance"); assert(saw_min); want_min=NULL;
+  expect_impedance("Z 50.0+j25.0" S_OHM);
+  impedance_sample(50,-25,83); expect_impedance("Z 50.0-j25.0" S_OHM);
+  preview("sweep-capacitive");
+  impedance_sample(50,0,30); expect_impedance("Z 50.0+j0.0" S_OHM);
+  // In-progress captures must not alter the completed measurement readout.
+  memset(measured,0,sizeof measured);
+  expect_impedance("Z 50.0+j0.0" S_OHM);
+  impedance_sample(0,0,0); expect_impedance("Z 0.0+j0.0" S_OHM);
+  // Extreme/unresolved Z has no numeric value; text must stay inside the LCD.
+  impedance_sample(9999,-9999,0); preview("impedance-wide");
+  impedance_sample(10001,0,0); preview("impedance-overrange"); expect_impedance("Z --");
+  impedance_sample(50,25,0);
+  for (unsigned i=0;i<sweep_points;i++) measured[0][i][0]=1, measured[0][i][1]=0;
+  antenna_ui_measurement(); preview("impedance-open"); expect_impedance("Z --");
+  for (unsigned i=0;i<sweep_points;i++) measured[0][i][1]=1e-30f;
+  antenna_ui_measurement(); expect_impedance("Z --"); // Near-open denominator underflow.
+  for (unsigned i=0;i<sweep_points;i++) measured[0][i][0]=1e30f;
+  antenna_ui_measurement(); expect_impedance("Z --"); // Finite but overflowing input.
+  uint32_t impedance_nan_bits=0x7fc00000;
+  for (unsigned i=0;i<sweep_points;i++) memcpy(&measured[0][i][0],&impedance_nan_bits,4);
+  antenna_ui_measurement(); preview("impedance-invalid"); expect_impedance("Z --");
+  sample();
   unsigned pause_updates=updates, pause_writes=writes;
   antenna_ui_touch(180,295); assert(!(sweep_mode&SWEEP_ENABLE));
   preview("paused"); assert(pixels[300][238]==0);
@@ -276,6 +385,11 @@ int main(void) {
   antenna_ui_touch(260,295);
   assert(frequency0==frequency1 && sweep_points==21);
   uint32_t cw=frequency0; sample(); preview("tune");
+  // TUNE uses the center sample even when a different sample has lower SWR.
+  impedance_sample(50,-25,sweep_points/2);
+  measured[0][0][0]=0; measured[0][0][1]=0;
+  antenna_ui_measurement(); expect_impedance("Z 50.0-j25.0" S_OHM);
+  preview("tune-impedance");
   antenna_ui_touch(425,108); // TUNE keeps its own frequency controls.
   assert(frequency0==cw && frequency0==frequency1 && sweep_points==21);
   antenna_ui_lever(EVT_UP); assert(frequency0==cw+1750 && frequency0==frequency1);
@@ -304,9 +418,11 @@ int main(void) {
   assert(antenna_ui_draw());
   cal_frequency0=14000000; cal_frequency1=14350000;
   cal_status=CALSTAT_APPLY|CALSTAT_ED|CALSTAT_ES|CALSTAT_ER;
-  sample(); preview("calibrated");
+  sample();
+  for (unsigned i=0;i<sweep_points;i++) measured[0][i][1]=-0.08f;
+  antenna_ui_measurement(); preview("calibrated");
   cal_frequency1=14200000; preview("outside-cal");
-  frequency1=15000000; preview("range-changed");
+  frequency1=15000000; preview("range-changed"); expect_impedance("Z --");
   antenna_ui_touch(180,295); assert(frequency1==14350000);
   antenna_ui_touch(20,295); preview("bands-hf");
   antenna_ui_touch(200,295); preview("bands-hf-page2");
@@ -319,8 +435,11 @@ int main(void) {
   antenna_ui_touch(20,295); antenna_ui_touch(340,50); preview("favorites");
   antenna_ui_touch(400,295); antenna_ui_touch(400,10);
   assert(!antenna_ui_draw());
-  assert(frequency0==1000000 && frequency1==30000000 && sweep_points==101);
-  assert(props_mode==(DOMAIN_MODE|TD_CENTER_SPAN) && current_props._portz==75 && sweep_mode==0);
+  assert(frequency0==144000000 && frequency1==148000000 && sweep_points==101);
+  assert(!(props_mode&(DOMAIN_MODE|TD_CENTER_SPAN)) && current_props._portz==50 && sweep_mode==1);
+  assert(trace[0].enabled && trace[0].type==TRC_SMITH && trace[0].channel==0 && trace[0].smith_format==MS_RX);
+  assert(trace[1].enabled && trace[1].type==TRC_SWR && trace[1].channel==0);
+  assert(!trace[2].enabled && !trace[3].enabled);
   assert(updates>600);
   // One 60 m tile covers all five channels; guides are drawn at their centers.
   antenna_ui_enter(0); antenna_ui_touch(20,295); antenna_ui_touch(20,50);
@@ -346,7 +465,6 @@ int main(void) {
   antenna_ui_touch(400,295);
   for(unsigned g=0;g<2;g++) for(unsigned p=0;p<(g?1:2);p++)
     for(unsigned j=0;j<6;j++) {
-      if(g && j==5) break;
       antenna_ui_touch(20,295); antenna_ui_touch(g*160+20,50);
       for(unsigned k=0;k<p;k++) antenna_ui_touch(180,295);
       antenna_ui_touch((j%2)*240+20,90+(j/2)*58);
@@ -631,21 +749,102 @@ int main(void) {
   preview("cable-restored");
   antenna_ui_touch(420,15); assert(antenna_ui_draw());
   antenna_ui_touch(420,15); assert(!antenna_ui_draw());
+  // Appended EU868 keeps old MULTI/CABLE IDs and the original favorite bits.
+  antenna_view_encode(config._reserved,ANTENNA_VIEW_EU868); antenna_ui_restore();
+  antenna_mode_encode(config._reserved,true); antenna_ui_restore();
+  assert(frequency0==863000000 && frequency1==870000000);
+  assert(antenna_cal_applied(1)); sample(); preview("eu868-sweep");
+  unsigned old_favorites=antenna_favorites_decode(config._reserved);
+  antenna_ui_touch(350,10); assert(config._vna_mode&VNA_MODE_EU868_FAVORITE_MASK);
+  assert(antenna_favorites_decode(config._reserved)==old_favorites);
+  fail_save=true; antenna_ui_touch(350,10); fail_save=false;
+  assert(config._vna_mode&VNA_MODE_EU868_FAVORITE_MASK);
+  antenna_ui_touch(20,295); antenna_ui_touch(180,50);
+  want_min="868 MHz"; saw_min=false; preview("vu-bands"); assert(saw_min); want_min=NULL;
+  antenna_ui_touch(400,295); antenna_ui_touch(400,10);
+  assert(frequency0==863000000 && trace[0].type==TRC_SMITH && trace[1].type==TRC_SWR);
+  antenna_ui_enter(0); antenna_ui_touch(350,10);
+  assert(!(config._vna_mode&VNA_MODE_EU868_FAVORITE_MASK));
+  antenna_ui_touch(400,10);
+  // An accidental visit preserves an arbitrary VNA setup, including unsaved
+  // coefficients. A saved source permits ANT CAL loading and restores it later.
+  const unsigned return_views[]={5,ANTENNA_VIEW_MULTI,ANTENNA_VIEW_CABLE};
+  for(unsigned stored=0;stored<2;stored++) for(unsigned v=0;v<3;v++) {
+    antenna_view_encode(config._reserved,return_views[v]);
+    frequency0=10000000; frequency1=11000000; sweep_points=201;
+    props_mode=DOMAIN_MODE|TD_CENTER_SPAN|TD_MARKER_TRACK|TD_MARKER_DELTA;
+    sweep_mode=stored?SWEEP_ENABLE:0;
+    current_props._portz=75; current_props.magic=0x434f4e54;
+    current_props._power=3; current_props._measure=4;
+    cal_frequency0=1000000; cal_frequency1=30000000;
+    cal_sweep_points=301; cal_power=1; cal_load_r=75;
+    cal_status=CALSTAT_APPLY|CALSTAT_ED|CALSTAT_ES|CALSTAT_ER|CALSTAT_INTERPOLATED;
+    for(unsigned i=0;i<5;i++) current_props._reserved1[i]=1000+i;
+    for(unsigned i=0;i<5;i++) for(unsigned p=0;p<401;p++)
+      for(unsigned c=0;c<2;c++) cal_data[i][p][c]=i+p*0.001f+c*0.0001f;
+    for(unsigned i=0;i<TRACES_MAX;i++)
+      trace[i]=(trace_t){.enabled=1,.type=10+i,.channel=1,.scale=2+i,.refpos=3+i};
+    for(unsigned i=0;i<MARKERS_MAX;i++)
+      markers[i]=(marker_t){.enabled=i%2,.index=i*25,.frequency=10000000+i*125000};
+    active_marker=3;
+    trace_t original_traces[TRACES_MAX]; memcpy(original_traces,trace,sizeof trace);
+    marker_t original_markers[MARKERS_MAX]; memcpy(original_markers,markers,sizeof markers);
+    properties_t original_props=current_props;
+    vna_saved=current_props; vna_saved_valid=stored!=0; lastsaveid=stored?0:NO_SAVE_SLOT;
+    antenna_ui_enter(0);
+    if(!stored) assert(!memcmp(cal_data,original_props._cal_data,sizeof cal_data));
+    for(unsigned i=0;i<10;i++) { sample(); antenna_ui_prepare_sweep(); }
+    if(v==1) antenna_ui_touch(220,15); // Direct MULTI -> VNA, after automatic scans.
+    else {
+      if(v==2) antenna_ui_touch(420,15); // CABLE -> ANT, no deliberate band selection.
+      antenna_ui_touch(420,15);
+    }
+    assert(!antenna_ui_draw());
+    assert(frequency0==10000000 && frequency1==11000000 && sweep_points==201);
+    assert(props_mode==(DOMAIN_MODE|TD_CENTER_SPAN|TD_MARKER_TRACK|TD_MARKER_DELTA));
+    assert(sweep_mode==(stored?SWEEP_ENABLE:0));
+    assert(!memcmp(&current_props,&original_props,sizeof current_props));
+    assert(!memcmp(trace,original_traces,sizeof trace));
+    assert(!memcmp(markers,original_markers,sizeof markers) && active_marker==3);
+    assert(cal_frequency0==1000000 && cal_frequency1==30000000 && cal_sweep_points==301);
+    assert(cal_power==1 && cal_load_r==75 && lastsaveid==(stored?0:NO_SAVE_SLOT));
+    assert(cal_status==(CALSTAT_APPLY|CALSTAT_ED|CALSTAT_ES|CALSTAT_ER|CALSTAT_INTERPOLATED));
+  }
+  // Explicit US915/33 cm selection opens exactly that band in a CH0-only view.
+  antenna_view_encode(config._reserved,5); antenna_ui_enter(0);
+  antenna_ui_touch(20,295); antenna_ui_touch(180,50); antenna_ui_touch(300,150);
+  assert(frequency0==902000000 && frequency1==928000000);
+  impedance_sample(50,0,17); uint32_t minimum_frequency=get_frequency(17);
+  antenna_ui_touch(420,15);
+  assert(frequency0==902000000 && frequency1==928000000);
+  assert(trace[0].enabled && trace[0].type==TRC_SMITH && trace[0].channel==0);
+  assert(trace[1].enabled && trace[1].type==TRC_SWR && trace[1].channel==0);
+  assert(!trace[2].enabled && !trace[3].enabled && current_props._measure==MEASURE_NONE);
+  assert(!(props_mode&(DOMAIN_MODE|TD_MARKER_TRACK|TD_MARKER_DELTA)));
+  assert(markers[0].enabled && markers[0].frequency==minimum_frequency && active_marker==0);
+  for(unsigned i=1;i<MARKERS_MAX;i++) assert(!markers[i].enabled);
+  // TUNE returns the full band, with its marker at the frequency being tuned.
+  antenna_ui_enter(0); antenna_ui_touch(260,295); antenna_ui_lever(EVT_UP);
+  uint32_t tuned_frequency=frequency0; sample(); antenna_ui_touch(420,15);
+  assert(frequency0==902000000 && frequency1==928000000);
+  assert(markers[0].frequency==tuned_frequency);
   puts("antenna UI transitions, mode persistence, favorites roller, bounds and rendering passed");
 }
 '''
 with tempfile.TemporaryDirectory() as d:
     tmp = Path(d)
     (tmp / 'nanovna.h').write_text(HEADER)
-    for name in ('ui/core/ui_core.h', 'ui/core/ui_keypad.h', 'ui/core/ui_menu_engine.h', 'ui/menus/menu_cal.h', 'rf/analysis.h'):
+    for name in ('ui/core/ui_core.h', 'ui/core/ui_keypad.h', 'ui/core/ui_menu_engine.h', 'ui/menus/menu_cal.h', 'ui/draw/traces.h', 'rf/analysis.h'):
         p = tmp / name
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text('#include "nanovna.h"\n')
     (tmp / 'harness.c').write_text(HARNESS)
+    (tmp / 'impedance.c').write_text('#include "nanovna.h"\n#define PORT_Z current_props._portz\n' + trace_math())
     command = shlex.split(os.environ.get('HOST_CC', 'cc'))
-    subprocess.run(command + ['-std=c11', '-Wall', '-Wextra', '-Werror', '-DNANOVNA_F303=1',
-        '-I' + str(tmp), '-I' + str(ROOT / 'include'), str(tmp / 'harness.c'),
-        str(ROOT / 'src/ui/antenna_ui.c'), str(ROOT / 'src/processing/antenna.c'),
-        str(ROOT / 'src/processing/antenna_cal_grid.c'),
-        str(ROOT / 'src/ui/resources/fonts/Font7x11b.c'), '-lm', '-o', str(tmp / 'test')], check=True)
-    subprocess.run([str(tmp / 'test')], check=True)
+    for flags in ([], ['-O2', '-ffast-math']):
+        subprocess.run(command + ['-std=c11', '-Wall', '-Wextra', '-Werror', '-DNANOVNA_F303=1',
+            *flags, '-I' + str(tmp), '-I' + str(ROOT / 'include'), str(tmp / 'harness.c'), str(tmp / 'impedance.c'),
+            str(ROOT / 'src/ui/antenna_ui.c'), str(ROOT / 'src/processing/antenna.c'),
+            str(ROOT / 'src/processing/antenna_cal_grid.c'),
+            str(ROOT / 'src/ui/resources/fonts/Font7x11b.c'), '-lm', '-o', str(tmp / 'test')], check=True)
+        subprocess.run([str(tmp / 'test')], check=True)

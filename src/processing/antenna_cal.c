@@ -45,6 +45,7 @@ bool antenna_cal_load(unsigned profile) {
   current_props.magic=ANT_CAL_MAGIC;
   cal_frequency0=p->_cal_frequency0; cal_frequency1=p->_cal_frequency1;
   cal_sweep_points=ANT_CAL_POINTS; cal_power=p->_cal_power;
+  cal_load_r=p->_cal_load_r;
   current_props._power=cal_power;
   cal_status=CALSTAT_ED|CALSTAT_ES|CALSTAT_ER|CALSTAT_APPLY|CALSTAT_INTERPOLATED;
   lastsaveid=ANT_CAL_FIRST_SLOT+profile;
@@ -146,6 +147,7 @@ bool antenna_cal_step(void) {
     cal_frequency0=antenna_cal_frequency(p,0);
     cal_frequency1=antenna_cal_frequency(p,ANT_CAL_POINTS-1);
     cal_sweep_points=ANT_CAL_POINTS; cal_power=power;
+    cal_load_r=50; // The ANT walkthrough explicitly requests a 50-ohm LOAD.
     current_props._reserved1[0]=p;
     current_props._reserved1[1]=threshold; current_props._reserved1[2]=(uint32_t)offset;
     current_props._reserved1[3]=xtal; current_props._reserved1[4]=band_mode;

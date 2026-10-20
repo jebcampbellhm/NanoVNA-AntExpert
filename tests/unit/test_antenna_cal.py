@@ -61,7 +61,7 @@ typedef int semaphore_t;
 typedef int msg_t;
 typedef struct { uint32_t magic; freq_t _frequency0,_frequency1,_cal_frequency0,_cal_frequency1;
   uint16_t _sweep_points,_cal_sweep_points,_cal_status;
-  uint8_t _power,_cal_power; uint32_t _reserved1[5];
+  uint8_t _power,_cal_power; uint32_t _reserved1[5]; float _cal_load_r;
   float _cal_data[5][401][2]; uint32_t checksum;
 } properties_t;
 typedef struct { uint32_t magic,_harmonic_freq_threshold; int32_t _IF_freq;
@@ -82,6 +82,7 @@ extern float measured[2][401][2];
 #define cal_status current_props._cal_status
 #define cal_power current_props._cal_power
 #define cal_data current_props._cal_data
+#define cal_load_r current_props._cal_load_r
 static inline uint32_t __ROR(uint32_t v,unsigned n) { return (v>>n)|(v<<(32-n)); }
 void chThdYield(void);
 void chSemObjectInit(semaphore_t *,int);
@@ -118,7 +119,11 @@ HARNESS = r'''
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/mman.h>
+#endif
 properties_t current_props;
 config_t config={._harmonic_freq_threshold=300000000,._IF_freq=12000,._xtal_freq=26000000,._band_mode=3};
 uint8_t sweep_mode=1;
@@ -146,7 +151,8 @@ void app_measurement_update_frequencies(void) {}
 bool need_interpolate(freq_t a,freq_t b,uint16_t n) {
   return a!=cal_frequency0 || b!=cal_frequency1 || n!=cal_sweep_points;
 }
-uint32_t si5351_get_harmonic_lvl(uint32_t f) { return f>=300000000; }
+static uint32_t harmonic_split=300000000;
+uint32_t si5351_get_harmonic_lvl(uint32_t f) { return f>=harmonic_split; }
 void ui_message_box_draw(const char *a,const char *b) { (void)a;(void)b; }
 bool app_measurement_sweep(bool breaking,uint16_t mask) {
   assert(!breaking && mask==SWEEP_CH0_MEASURE);
@@ -169,15 +175,19 @@ static void finish_capture(void) {
   assert(antenna_cal_stage()==4);
 }
 int main(void) {
+#ifdef _WIN32
+  assert(VirtualAlloc((void *)0x08000000,0x40000,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE)==(void *)0x08000000);
+#else
   assert(mmap((void *)0x08000000,0x40000,PROT_READ|PROT_WRITE,
               MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE,-1,0)==(void *)0x08000000);
+#endif
   memset((void *)0x08000000,255,0x40000);
   config_service_init();
   frequency0=14000000; frequency1=14350000; sweep_points=101;
   current_props._power=3;
-  // Fingerprints of the published ANT1 grids, before sharing the UI endpoints.
+  // HF retains the published mapping; V/U adds EU868 and redistributes points.
   // An FNV-style word hash guards the exact persisted frequency/index mapping.
-  const uint32_t grid_fingerprint[]={0x960fe1d7u,0x342c03a3u};
+  const uint32_t grid_fingerprint[]={0x960fe1d7u,0xd68238fbu};
   for(unsigned p=0;p<2;++p) {
     uint32_t prev=0, fingerprint=2166136261u;
     for(unsigned i=0;i<401;++i) {
@@ -205,6 +215,28 @@ int main(void) {
     }
   }
   assert(point==ANT_CAL_POINTS);
+  // All V/U endpoints, proportionate spacing and gaps, in increasing order.
+  const uint32_t vu[][3]={{50000000,54000000,13},{144000000,148000000,13},
+    {222000000,225000000,10},{420000000,450000000,89},{863000000,870000000,22},
+    {902000000,928000000,77},{1240000000,1300000000,177}};
+  point=0;
+  for(unsigned b=0;b<7;b++) {
+    uint32_t prev=0;
+    assert(antenna_cal_range(1,vu[b][0],vu[b][1]));
+    for(unsigned n=0;n<vu[b][2];n++) {
+      uint32_t f=antenna_cal_frequency(1,point++);
+      assert(f>=vu[b][0] && f<=vu[b][1]);
+      if(n==0) assert(f==vu[b][0]);
+      else assert(f>prev && f-prev<=342106);
+      if(n+1==vu[b][2]) assert(f==vu[b][1]);
+      prev=f;
+    }
+    unsigned index; float fraction;
+    assert(!antenna_cal_bracket(1,vu[b][0]-1,&index,&fraction));
+    assert(!antenna_cal_bracket(1,vu[b][1]+1,&index,&fraction));
+  }
+  assert(point==ANT_CAL_POINTS);
+  assert(!antenna_cal_range(1,870000000,902000000));
   unsigned j; float k;
   assert(!antenna_cal_bracket(0,5000000,&j,&k));
   assert(!antenna_cal_range(1,148000000,222000000));
@@ -227,7 +259,9 @@ int main(void) {
   assert(antenna_cal_step() && !antenna_cal_stage());
   assert(antenna_cal_saved(0) && antenna_cal_saved(1));
   for(unsigned p=0;p<2;++p) {
+    cal_load_r=75;
     assert(antenna_cal_load(p));
+    assert(cal_load_r==50);
     for(unsigned i=0;i<401;++i) {
       close_enough(cal_data[0][i][0],0.02f);
       close_enough(cal_data[1][i][0],0.1f);
@@ -241,10 +275,32 @@ int main(void) {
   }
   memcpy(saved,(void *)0x08030800,32768);
   memset(capture,0,sizeof capture);
+  // A nonconstant table verifies fractional interpolation on the EU868 grid.
+  assert(antenna_cal_load(1));
+  for(unsigned i=0;i<401;i++) cal_data[0][i][0]=(float)i;
+  float interpolated[5][2]; unsigned bracket; float fraction;
+  assert(antenna_cal_bracket(1,868100000,&bracket,&fraction));
+  assert(fraction>0 && fraction<1);
+  assert(antenna_cal_interpolate(868100000,interpolated));
+  close_enough(interpolated[0][0],bracket+fraction);
+  // Never blend coefficients across a clock harmonic transition, even when
+  // it lies inside a segment rather than in an uncalibrated band gap.
+  harmonic_split=868100000;
+  assert(antenna_cal_interpolate(harmonic_split-1,interpolated));
+  close_enough(interpolated[0][0],bracket);
+  assert(antenna_cal_interpolate(harmonic_split,interpolated));
+  close_enough(interpolated[0][0],bracket+1);
+  harmonic_split=300000000;
   assert(antenna_cal_begin(1)); finish_capture();
   assert(capture[0]==1 && capture[1]==1 && capture[2]==1); // Keep existing V/U.
   assert(antenna_cal_step());
   assert(!memcmp(saved+16384,(void *)0x08034800,16384));
+  // Upgrade path: recapture only V/U and preserve the complete HF flash slot.
+  memcpy(saved,(void *)0x08030800,32768); memset(capture,0,sizeof capture);
+  assert(antenna_cal_begin(2)); finish_capture();
+  assert(capture[0]==2 && capture[1]==2 && capture[2]==2);
+  assert(antenna_cal_step());
+  assert(!memcmp(saved,(void *)0x08030800,16384));
   memcpy(saved,(void *)0x08030800,32768);
   *(uint8_t *)(uintptr_t)(SAVE_PROP_CONFIG_ADDR-1)=0x5a;
   *(uint8_t *)(uintptr_t)(SAVE_PROP_CONFIG_ADDR+SAVE_FULL_AREA_SIZE)=0xa5;

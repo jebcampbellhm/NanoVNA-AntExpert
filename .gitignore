@@ -9,6 +9,7 @@
 *.lst
 *.o
 *.d
+__pycache__/
 
 
 # Generated resources

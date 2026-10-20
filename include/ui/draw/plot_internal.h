@@ -184,11 +184,12 @@ static inline float get_l(float re, float im) {
 
 static inline float get_s11_r(float re, float im, float z) {
   float l = get_l(re, im);
-  return z * (1.0f - l) / (1.0f - 2.0f * re + l);
+  // Callers supply 1-Gamma for Z, or 1+Gamma for Y (with z=1/Z0).
+  return z * (2.0f * re - l) / l;
 }
 
 static inline float get_s11_x(float re, float im, float z) {
-  return -2.0f * z * im / (1.0f - 2.0f * re + get_l(re, im));
+  return -2.0f * z * im / get_l(re, im);
 }
 
 static inline float get_s21_r(float re, float im, float z) {

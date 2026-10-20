@@ -96,6 +96,26 @@ static void test_negative_and_wrapped(void) {
   }
 }
 
+#ifdef NANOVNA_F303
+static void test_dense_h4_quadrants(void) {
+  double largest_error=0, largest_norm=0;
+  // Include the final interpolation cell near each quadrant boundary, with
+  // fractional turns and negative wrapping. Reference the exact float input.
+  for (unsigned i=0;i<=200000;i++) {
+    float turns=-2.0f+i*(4.0f/200000), s, c;
+    vna_sincosf(turns,&s,&c);
+    double radians=(double)turns*6.28318530717958647692;
+    double error=fmax(fabs(s-sin(radians)),fabs(c-cos(radians)));
+    double norm=fabs((double)s*s+(double)c*c-1);
+    if (error>largest_error) largest_error=error;
+    if (norm>largest_norm) largest_norm=norm;
+  }
+  printf("[H4] dense sin/cos max error %.9g, norm error %.9g, FFT %u\n",
+         largest_error,largest_norm,FFT_SIZE);
+  if (largest_error>1e-6 || largest_norm>5e-7) ++g_failures;
+}
+#endif
+
 static void test_modff(void) {
   /*
    * vna_modff() backs calibration math and must match libm semantics even when
@@ -181,6 +201,9 @@ static void test_fft_roundtrip(void) {
 int main(void) {
   test_primary_interval();
   test_negative_and_wrapped();
+#ifdef NANOVNA_F303
+  test_dense_h4_quadrants();
+#endif
   test_modff();
   test_vna_sqrt();
   test_fft_impulse();

@@ -15,7 +15,8 @@ const antenna_band_t antenna_bands[ANTENNA_BAND_COUNT] = {
   {"12m",24890000,24990000,24930000}, {"10m",28000000,29700000,28300000},
   {"6m",50000000,54000000,0}, {"2m",144000000,148000000,0},
   {"1.25m",222000000,225000000,0}, {"70cm",420000000,450000000,0},
-  {"33cm",902000000,928000000,0}, {"23cm",1240000000,1300000000,0}
+  {"33cm",902000000,928000000,0}, {"23cm",1240000000,1300000000,0},
+  {"EU868",863000000,870000000,0}
 };
 
 static bool finite_float(float x) {
@@ -53,10 +54,10 @@ antenna_result_t antenna_analyze(const float *swr, unsigned count) {
   r.bandwidth_valid = true;
   return r;
 }
-// v2: 16 favorite bits, five view bits (0..15 band, 16 MULTI, 17 CABLE), one
+// v2: 16 favorite bits, five view bits (0..15 band, 16 MULTI, 17 CABLE, 18 EU868), one
 // startup-mode bit and a two-bit tag. Invalid/erased records use defaults.
 static bool saved_view_valid(const uint8_t bytes[3]) {
-  return (bytes[2] & 0xc0) == 0xc0 && (bytes[2] & 31) <= ANTENNA_VIEW_CABLE;
+  return (bytes[2] & 0xc0) == 0xc0 && (bytes[2] & 31) <= ANTENNA_VIEW_EU868;
 }
 unsigned antenna_view_decode(const uint8_t bytes[3]) {
   return saved_view_valid(bytes) ? bytes[2] & 31 : 5;
@@ -82,6 +83,6 @@ void antenna_mode_encode(uint8_t bytes[3], bool enabled) {
   encode_settings(bytes,antenna_favorites_decode(bytes),antenna_view_decode(bytes),enabled);
 }
 void antenna_view_encode(uint8_t bytes[3], unsigned view) {
-  if (view > ANTENNA_VIEW_CABLE) return;
+  if (view > ANTENNA_VIEW_EU868) return;
   encode_settings(bytes,antenna_favorites_decode(bytes),view,antenna_mode_decode(bytes));
 }
