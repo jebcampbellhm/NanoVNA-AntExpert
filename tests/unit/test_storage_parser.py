@@ -62,7 +62,7 @@ static bool strcmpi(const char *a,const char *b) {return strcasecmp(a,b)==0;}
 static void pause_sweep(void) { pauses++; }
 static void set_sweep_frequency(unsigned mode,uint32_t f) { limits[mode]=f; }
 static void request_to_redraw(unsigned r) { (void)r; redraws++; }
-''' + function('load_snp') + r'''
+''' + function('load_snp_data' if 'FILE_LOAD_CALLBACK(load_snp_data)' in text else 'load_snp').replace('load_snp_data','load_snp') + r'''
 static const char *run(unsigned fail,uint8_t format) {
   reads=pauses=redraws=0; fail_at=fail;
   current_props._sweep_points=4; limits[0]=100; limits[1]=200;

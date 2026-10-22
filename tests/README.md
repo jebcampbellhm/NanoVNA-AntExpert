@@ -27,6 +27,12 @@ make test
 The `test` target builds every suite into `build/tests/*.out` and executes them.
 Failures are reported with descriptive messages.
 
+The target also runs the Python regression harnesses for VNA calculations and
+failed calibration/scan captures, H/H4 CAL import and binary SD I/O, Touchstone
+parsing, H4 I2C fault recovery, DMA flag ownership and linker storage boundaries.
+They extract production functions or compile complete production modules with
+host stubs. See [validation and compatibility notes](../doc/upstream_fixes_validation.md).
+
 ## Extending
 
 1. Drop a new `tests/unit/test_*.c` file containing `main()` and register it in
