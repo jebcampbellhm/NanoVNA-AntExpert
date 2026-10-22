@@ -190,12 +190,17 @@ and coverage on other hardware revisions remain work in progress.
 ```sh
 git clone --branch antenna_expert https://github.com/jebcampbellhm/NanoVNA-AntExpert.git
 cd NanoVNA-AntExpert
+bash tools/install-arm-toolchain.sh "$PWD/../arm-gnu-14.2.rel1"
+export PATH="$PWD/../arm-gnu-14.2.rel1/bin:$PATH"
 make test
 make TARGET=F303 USE_LTO=yes -j$(nproc)
 ```
 
-Use an Arm GNU toolchain and Ubuntu/WSL; development builds currently use Arm GCC
-14.2.1. The default target, GitHub CI and release builds are **H4/F303 only**.
+Use Ubuntu/WSL on x86_64. CI and releases pin the official Arm GNU 14.2.Rel1
+package (GCC 14.2.1), verified by SHA-256, including its runtime libraries.
+Use the same package locally when comparing firmware sizes; distribution compiler
+packages can produce different images. The default target, GitHub CI and release
+builds are **H4/F303 only**.
 The H4 code partition is almost full;
 the linker must continue to protect saved calibration storage. Detailed
 prerequisites and USB DFU instructions are in [the build guide](doc/building.md).

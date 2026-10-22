@@ -3,9 +3,10 @@
 [Русская версия](building_ru.md)
 
 This guide documents a reproducible path to build the NanoVNA-X firmware from
-source. The steps below have been verified on macOS, Ubuntu/Debian and inside
-a GitHub Actions runner. Other Unix-like environments should work as long as
-the same ARM GCC cross-compiler is available.
+source. CI and release builds use the pinned Linux x86_64 Arm GNU 14.2.Rel1
+package (GCC 14.2.1), including its runtime libraries. Use that same package in
+WSL/Linux when comparing build sizes; distribution packages can produce different
+images even when the GCC version appears similar.
 
 ## 1. Install prerequisites
 
@@ -16,7 +17,7 @@ NanoVNA-X targets ARM Cortex-M microcontrollers and therefore requires the
 
 ```bash
 sudo apt update
-sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi dfu-util
+sudo apt install build-essential python3 curl ca-certificates xz-utils dfu-util
 ```
 
 ### macOS (Homebrew)
@@ -31,12 +32,6 @@ Use [WSL2](https://learn.microsoft.com/windows/wsl/install) with an Ubuntu
 distribution and follow the Linux instructions above. Native Windows builds are
 possible with the ARM GNU toolchain archive from Arm, but the project is tested
 on Unix environments.
-
-Verify that the compiler is available:
-
-```bash
-arm-none-eabi-gcc --version
-```
 
 ## 2. Fetch the source code
 
@@ -65,15 +60,8 @@ When adding new code or porting patches, drop each feature into the matching lay
 
 ## 3. Choose a target board
 
-The firmware can be built for two board profiles. Select the target by setting
-the `TARGET` environment variable before invoking `make`:
-
-| Target | Board                | MCU profile |
-|--------|----------------------|-------------|
-| F072   | NanoVNA-H (default)  | STM32F072   |
-| F303   | NanoVNA-H4           | STM32F303   |
-
-If you omit `TARGET`, the build defaults to `F072`.
+This branch builds **H4/F303 only**, which is also the default target. The
+retained H/F072 board sources are not an AntExpert release target.
 
 The same image supports the different RF hardware revisions. For NanoVNA-H
 rev3.7 or NanoVNA-H4 rev4.4 with ZeeTK NE602A mixers and an SJWCH5351 clock
@@ -84,18 +72,24 @@ board markings and save before calibrating; see the [ANT guide](antenna_expert.m
 
 ## 4. Build the firmware
 
-Use the standard GNU Make workflow:
+On Linux x86_64 / WSL, install the pinned compiler and use GNU Make:
 
 ```bash
-export TARGET=F072   # or F303
-make clean           # optional, but recommended between target switches
-make -j$(nproc)
+bash tools/install-arm-toolchain.sh "$PWD/../arm-gnu-14.2.rel1"
+export PATH="$PWD/../arm-gnu-14.2.rel1/bin:$PATH"
+make clean
+make TARGET=F303 USE_LTO=yes -j$(nproc)
 ```
 
-On macOS use `make -j$(sysctl -n hw.ncpu)` for the parallel build step.
+On macOS skip the Linux installer and PATH commands, use the Homebrew compiler
+above, and run `make -j$(sysctl -n hw.ncpu)` for the parallel build step. Its
+output may differ in size from the pinned Linux release toolchain.
 
-With GNU Arm GCC 14.2.1, use `make TARGET=F072 USE_LTO=yes -j$(nproc)` for the
-smaller NanoVNA-H: the non-LTO image exceeds its firmware flash allocation.
+The installer verifies Arm's published SHA-256 checksum before extracting. The
+release and hash are locked in `tools/arm-toolchain.env`; changing that file also
+separates CI caches by compiler and runtime-library package. The helper supports
+Linux x86_64 (including x86_64 WSL), not native macOS or Windows.
+
 NanoVNA-H4 (`TARGET=F303`) enables LTO by default to fit below the first
 calibration slot at `0x0801C800`. Its firmware allocation is 114 KiB; the
 linker rejects larger images rather than allowing firmware to overlap saved
@@ -104,9 +98,9 @@ enlarging the linker region.
 
 The build artefacts are written to `build/`:
 
-- `build/H.elf` / `build/H4.elf` – the ELF image for debugging.
-- `build/H.bin` / `build/H4.bin` – the binary file used for DFU flashing.
-- `build/H.hex` / `build/H4.hex` – Intel HEX formatted image.
+- `build/H4.elf` – the ELF image for debugging.
+- `build/H4.bin` – the binary file used for DFU flashing.
+- `build/H4.hex` – Intel HEX formatted image.
 
 ### 4.1 Understand the artefacts
 
