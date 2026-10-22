@@ -423,7 +423,8 @@ static void draw_multi(void) {
     // CAL refers to this cached band, not the currently sweeping band.
     label((cache.overview.ready & bit) ?
           ((cache.overview.calibrated & bit) ? "CAL" : "UNCAL") : "--",x+83,y+8,1);
-    plot_printf(s,sizeof(s),"%.3f-%.3f",(double)b->start/1000000,(double)b->stop/1000000);
+    plot_printf(s,sizeof(s),"%u.%03u-%u.%03u",(b->start+500)/1000000,((b->start+500)/1000)%1000,
+                (b->stop+500)/1000000,((b->stop+500)/1000)%1000);
     label(s,x+6,y+28,1);
     for (unsigned n=0;n<2;++n) {
       float v=n ? cache.overview.high[k] : cache.overview.low[k];
@@ -480,7 +481,7 @@ static void draw_cable(void) {
   plot_printf(s,sizeof s,"VF %u%%",velocity_factor);
   label(s,338,76,2);
   button("-",338,110,60,44); button("+",408,110,60,44);
-  plot_printf(s,sizeof s,"FREQ %.6f MHz",(double)cable_target/1000000.0);
+  plot_printf(s,sizeof s,"FREQ %u.%06u MHz",cable_target/1000000,cable_target%1000000);
   button(s,12,166,310,38);
   label("Roller: VF",338,180,1);
   float target = (SPEED_OF_LIGHT/400.0f)*velocity_factor/cable_target;
@@ -535,7 +536,7 @@ static void draw_strip(void) {
     label(s,12,90,5);
   }
   freq_t f = tuning ? tune_frequency : (ready ? get_frequency(result.minimum) : expected_start);
-  plot_printf(s,sizeof(s),"%.5f MHz",(double)f/1000000.0);
+  plot_printf(s,sizeof(s),"%u.%05u MHz",(f+5)/1000000,((f+5)/10)%100000);
   int fx = band < 10 && !tuning ? 190 : 222;
   label(s,fx,92,2);
   if (band < 10 && !tuning) button("MULTI",380,82,100,54);
@@ -569,8 +570,8 @@ static void draw_strip(void) {
           line(42+(i-1)*424/(count-1),graph_y(curve[i-1]),
                    42+i*424/(count-1),graph_y(curve[i]));
     ink = GET_PALTETTE_COLOR(LCD_FG_COLOR);
-    plot_printf(s,sizeof(s),"%.4f",(double)expected_start/1000000.0); label(s,42,250,1);
-    plot_printf(s,sizeof(s),"%.4f MHz",(double)expected_stop/1000000.0); label(s,363,250,1);
+    plot_printf(s,sizeof(s),"%u.%04u",(expected_start+50)/1000000,((expected_start+50)/100)%10000); label(s,42,250,1);
+    plot_printf(s,sizeof(s),"%u.%04u MHz",(expected_stop+50)/1000000,((expected_stop+50)/100)%10000); label(s,363,250,1);
     // A separate rail below the axis leaves the SWR trace and channel guides
     // unobscured. These are the red CW/RTTY/data regions in the Extra row.
     const antenna_band_t *b = &antenna_bands[band];

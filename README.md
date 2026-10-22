@@ -4,12 +4,13 @@
 
 **NanoVNA-H4 only: support current H4 hardware and make antenna tuning a little easier.**
 
-**Current version: 0.1.2** — adds impedance readouts, context-aware ANT → VNA
-navigation, and EU868 coverage with redistributed V/U calibration points.
-Calibrated cable-length measurement and quarter-/half-wave targets remain available.
+**Current version: 0.1.3** — corrects Smith/impedance calculations and improves
+calibration, USB, storage and peripheral error handling, with flash savings.
+All standard VNA functions and ANT features remain available. See the
+[repair and validation report](doc/reviews/2026-10-22-repairs.md).
 
-Recalibrate
-**V/U ANT** after installing this build; its 401-point grid has changed. HF and
+Recalibrate **V/U ANT** when upgrading from before 0.1.2; that version changed
+its 401-point grid. Updating from 0.1.2 does not require recalibration. HF and
 the two-slot ANT1 storage format are unchanged. There is no 2.4 GHz ANT preset.
 
 This antenna firmware requires a **NanoVNA-H4 (STM32F303, 4-inch screen)**.

@@ -3,7 +3,7 @@
 Thank you for your interest in contributing. This guide explains how to propose changes, report issues, and participate constructively.
 
 ## Quick start
-- Fork the repository and create a topic branch from main.
+- Fork the repository and create a topic branch from antenna_expert.
 - Build locally and run basic checks before opening a pull request.
 - Open a draft pull request early for visibility; mark ready when complete.
 
@@ -25,7 +25,7 @@ Thank you for your interest in contributing. This guide explains how to propose 
 - Use labels if you have permission; otherwise describe severity and area.
 
 Template:
-- Environment: OS, compiler/toolchain versions, target (F072 or F303).
+- Environment: OS, compiler/toolchain versions, target (F303 / H4 only).
 - Steps: numbered steps to reproduce.
 - Evidence: logs, screenshots, traces, or links.
 - Impact: frequency, severity, workaround.
@@ -38,14 +38,14 @@ Template:
 - Ensure builds pass and follow style guidelines.
 
 Checklist:
-- Code compiles for TARGET=F072 and TARGET=F303.
+- Code compiles for TARGET=F303 (H4); F072 is not supported by this fork.
 - No warnings added under default flags.
 - Changelog entry or release notes draft if user-visible.
 - Updated docs and help strings if applicable.
 
 ## Development setup
 - Toolchain: arm-none-eabi, dfu-util installed and in PATH.
-- Build: make -jN TARGET=F072 or TARGET=F303. Artifacts in build/*.elf, *.bin, *.hex.
+- Build: make -jN TARGET=F303. Artifacts in build/*.elf, *.bin, *.hex.
 - Flash: DFU or SWD; ensure proper permissions for dfu-util.
 - When switching TARGET, run make clean.
 

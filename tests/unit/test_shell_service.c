@@ -59,6 +59,7 @@ USBDriver USBD1 = {.state = USB_ACTIVE};
 SerialUSBDriver SDU1 = {.stream = {.vmt = NULL}, .config = &serusbcfg, .user_data = NULL};
 
 static shell_stream_state_t g_stream_state;
+static unsigned write_calls;
 
 /* Implementation of msObjectInit for the test stub */
 void msObjectInit(MemoryStream *msp, uint8_t *buffer, size_t size, size_t eos) {
@@ -98,6 +99,7 @@ static shell_stream_state_t* stream_from_channel(BaseAsynchronousChannel* chp) {
 size_t chnWriteTimeout(BaseAsynchronousChannel* chp, const uint8_t* data, size_t size,
                        systime_t timeout) {
   (void)timeout;
+  ++write_calls;
   shell_stream_state_t* state = stream_from_channel(chp);
   if (state == NULL || data == NULL) {
     return 0;
@@ -321,11 +323,28 @@ static void test_shell_parse_and_overflow(void) {
   char** overflow_argv = NULL;
   const vna_shell_command* overflow_cmd =
       shell_parse_command(overflow_line, &overflow_argc, &overflow_argv, NULL);
-  CHECK(overflow_cmd == &g_test_commands[0], "known commands should still parse when clamped");
-  CHECK(overflow_argc == VNA_SHELL_MAX_ARGUMENTS,
-        "argc must be clamped to the configured maximum");
-  CHECK(strcmp(overflow_argv[VNA_SHELL_MAX_ARGUMENTS - 1], "4") == 0,
-        "excess arguments should be dropped");
+  CHECK(overflow_cmd == NULL && overflow_argc == 0 && overflow_argv == NULL,
+        "excess arguments must reject the command rather than truncate it");
+  char quote[]="\"";
+  CHECK(shell_parse_command(quote,&argc,&argv,&name)==NULL && !argc && !argv && !name,
+        "unterminated quotes must not execute a command");
+}
+
+static void test_stalled_output_recovers(void) {
+  reset_shell_state(NULL);
+  shell_update_vcp_connection_state(true);
+  char line[]="scan";
+  shell_parse_command(line,NULL,NULL,NULL);
+  g_stream_state.tx_len=sizeof g_stream_state.tx;
+  write_calls=0;
+  CHECK(shell_printf("blocked")==0, "stalled reader must abort output");
+  CHECK(write_calls==10, "ten 100ms stalls bound the blocked writer");
+  shell_printf("blocked again");
+  CHECK(write_calls==10, "remaining chunks of the failed response must not block again");
+  g_stream_state.tx_len=0;
+  char next[]="scan";
+  shell_parse_command(next,NULL,NULL,NULL);
+  CHECK(shell_printf("recovered")>0 && tx_contains("recovered"), "next command must recover output");
 }
 
 static void test_shell_deferred_queue_and_event_bus(void) {
@@ -344,9 +363,7 @@ static void test_shell_deferred_queue_and_event_bus(void) {
 
   shell_request_deferred_execution(cmd, argc, argv);
   CHECK(g_queue_enqueues == 1, "request should enqueue a worker wakeup");
-  CHECK(g_published_event_count == 1, "pending event must be published");
-  CHECK(g_published_events[0] == EVENT_USB_COMMAND_PENDING,
-        "pending event topic must match specification");
+  CHECK(g_published_event_count == 0, "completion must not queue another execution");
 
   trigger_pending_event();
   CHECK(g_command_invocations == 1, "event callback should drain pending command");
@@ -369,6 +386,7 @@ static void test_shell_read_line_and_echo(void) {
 }
 
 int main(void) {
+  test_stalled_output_recovers();
   test_shell_parse_and_overflow();
   test_shell_deferred_queue_and_event_bus();
   test_shell_read_line_and_echo();

@@ -112,7 +112,9 @@ static bool event_bus_enqueue(event_bus_t* bus, event_bus_queue_node_t* node, bo
   msg_t msg = (msg_t)node;
   msg_t result;
   if (from_isr) {
+    chSysLockFromISR();
     result = chMBPostI(&bus->mailbox, msg);
+    chSysUnlockFromISR();
   } else {
     result = chMBPost(&bus->mailbox, msg, TIME_IMMEDIATE);
   }

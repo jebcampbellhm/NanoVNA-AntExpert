@@ -26,12 +26,14 @@ source = r'''
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 typedef unsigned UINT;
 typedef uint32_t freq_t;
 typedef int FIL, FILINFO, FRESULT;
 #define FR_OK 0
 #define SWEEP_POINTS_MAX 4
 #define FREQUENCY_MAX 2700000000u
+#define FREQUENCY_MIN 50000u
 #define FMT_S2P_FILE 1
 #define ST_START 0
 #define ST_STOP 1
@@ -57,6 +59,7 @@ static int parse_line(char *s,char **args,int max) {
 }
 static uint32_t my_atoui(const char *s) { return strtoul(s,NULL,10); }
 static float my_atof(const char *s) { return strtof(s,NULL); }
+static bool strcmpi(const char *a,const char *b) {return strcasecmp(a,b)==0;}
 static void pause_sweep(void) { pauses++; }
 static void set_sweep_frequency(unsigned mode,uint32_t f) { limits[mode]=f; }
 static void request_to_redraw(unsigned r) { (void)r; redraws++; }
@@ -84,10 +87,20 @@ int main(void) {
   contents="";
   assert(strcmp(run(0,0),"Empty file")==0 && !valid && generations==1);
   contents="1000000 0.1\r\n";
-  assert(strcmp(run(0,0),"Empty file")==0 && !valid);
-  contents="1000000 0.1 0.2 0.3 0.4\r\n";
+  assert(strcmp(run(0,0),"Format err")==0 && !valid);
+  contents="1000000 0.1 0.2 0.3 0.4\r\n2000000 0.1 0.2 0.3 0.4\r\n";
   assert(run(0,FMT_S2P_FILE)==NULL && valid && generations==2);
   assert(measured[1][0][0]==0.3f && measured[1][0][1]==0.4f);
+  contents="# Hz S RI R 50\n1000000 0.1 0.2\n2000000 0.3 0.4";
+  assert(run(0,0)==NULL && current_props._sweep_points==2);
+  contents="# MHz S RI R 50\n1 0.1 0.2\n2 0.3 0.4";
+  assert(strcmp(run(0,0),"Format err")==0 && !valid);
+  contents="# Hz S DB R 50\n1000000 0.1 0.2\n2000000 0.3 0.4";
+  assert(strcmp(run(0,0),"Format err")==0);
+  contents="1000000 0.1 0.2\n1500000 0.3 0.4\n3000000 0.3 0.4";
+  assert(strcmp(run(0,0),"Nonuniform grid")==0);
+  contents="1000000 0.1 0.2\n";
+  assert(strcmp(run(0,0),"Format err")==0);
   puts("[PASS] SD imports: complete files, empty input and first/partial read failures");
 }
 '''

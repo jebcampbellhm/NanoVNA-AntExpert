@@ -132,9 +132,14 @@ static void test_parse_line(void) {
   char small_buf[] = "a b c d";
   char* small_argv[2];
   int small_argc = parse_line(small_buf, small_argv, 2);
-  CHECK(small_argc == 2);
+  CHECK(small_argc == 3); // More arguments than capacity; never write argv[2].
   CHECK(strcmp(small_argv[0], "a") == 0);
   CHECK(strcmp(small_argv[1], "b") == 0);
+  char empty[] = "\"\"", missing[] = "\"", adjacent[] = "\"a\"b", trailing[] = "a \"b\"";
+  CHECK(parse_line(empty, argv, 4) == 1 && argv[0][0] == 0);
+  CHECK(parse_line(missing, argv, 4) == -1);
+  CHECK(parse_line(adjacent, argv, 4) == 2 && strcmp(argv[1], "b") == 0);
+  CHECK(parse_line(trailing, argv, 4) == 2 && strcmp(argv[1], "b") == 0);
 }
 
 static void test_swap_bytes(void) {

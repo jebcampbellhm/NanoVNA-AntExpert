@@ -931,7 +931,9 @@ freq_t get_frequency_step(void) {
 void app_measurement_set_frequencies(freq_t start, freq_t stop, uint16_t points) {
   freq_t span = stop - start;
   _f_start = start;
-  _f_points = points - 1U;
+  // Entry points reject fewer than two samples. Keep the generator safe too.
+  _f_points = points > 1U ? points - 1U : 1U;
+  if (points < 2U) span = 0;
   _f_delta = span / _f_points;
   _f_error = span % _f_points;
 }

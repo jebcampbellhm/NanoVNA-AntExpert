@@ -36,6 +36,12 @@ int main(void) {
   plot_printf(s,sizeof s,"VF %u%% / %u MHz",66u,300u); assert(!strcmp(s,"VF 66% / 300 MHz"));
   plot_printf(s,sizeof s,"%.5f MHz",14.175); assert(!strcmp(s,"14.17500 MHz"));
   plot_printf(s,sizeof s,"FREQ %.6f MHz",14.2); assert(!strcmp(s,"FREQ 14.200000 MHz"));
+  uint32_t hz=863012345u;
+  plot_printf(s,sizeof s,"FREQ %u.%06u MHz",hz/1000000,hz%1000000);
+  assert(!strcmp(s,"FREQ 863.012345 MHz"));
+  hz=14349999u;
+  plot_printf(s,sizeof s,"%u.%05u MHz",(hz+5)/1000000,((hz+5)/10)%100000);
+  assert(!strcmp(s,"14.35000 MHz"));
   plot_printf(s,sizeof s,"1/%u: %.2f m / %.2f ft",4u,6.967,22.856);
   assert(!strcmp(s,"1/4: 6.97 m / 22.86 ft"));
   plot_printf(s,sizeof s,"%+.2f / %04u",-1.25,7u); assert(!strcmp(s,"-1.25 / 0007"));

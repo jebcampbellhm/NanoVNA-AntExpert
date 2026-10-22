@@ -42,10 +42,15 @@ static void callback(unsigned flags) {
         source+='\n'.join(body for _,body in functions)
         source+='\nint main(void) {\n'
         for name,_ in functions:
+            owned = ''
+            if board == 'STM32F303' and driver == 'dma_v1.c':
+                channel = int(re.search(r'CH(\d)', name)[1])
+                owned = f'assert(regs.IFCR == (15u << {4*(channel-1)}));'
             source+=f'''
   depth=entries=exits=callbacks=switches=ready=0;
   regs.ISR=0xffffffff; regs.PR=0xffff;
   {name}();
+  {owned}
   assert(depth==0 && callbacks>0 && switches==1 && entries==exits);
   depth=entries=exits=callbacks=switches=0; ready=1;
   regs.ISR=0; regs.PR=0;

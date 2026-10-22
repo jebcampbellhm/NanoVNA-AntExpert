@@ -59,13 +59,24 @@ HEADER = r'''
 typedef uint32_t freq_t;
 typedef int semaphore_t;
 typedef int msg_t;
+#define FREQUENCY_MIN 50000u
+#define FREQUENCY_MAX 2700000000u
+#define TRACES_MAX 4
+#define MARKERS_MAX 4
+#define MAX_TRACE_TYPE 30
+#define MS_END 13
+#define LM_EDELAY 4
+typedef struct { unsigned type,channel,smith_format; float scale,refpos; } trace_t;
+typedef struct { uint16_t index; } marker_t;
 typedef struct { uint32_t magic; freq_t _frequency0,_frequency1,_cal_frequency0,_cal_frequency1;
   uint16_t _sweep_points,_cal_sweep_points,_cal_status;
-  uint8_t _power,_cal_power; uint32_t _reserved1[5]; float _cal_load_r;
+  uint8_t _power,_cal_power; uint32_t _reserved1[5]; float _cal_load_r,_portz;
+  int8_t _current_trace,_active_marker,_previous_marker;
+  trace_t _trace[TRACES_MAX]; marker_t _markers[MARKERS_MAX];
   float _cal_data[5][401][2]; uint32_t checksum;
 } properties_t;
 typedef struct { uint32_t magic,_harmonic_freq_threshold; int32_t _IF_freq;
-  uint32_t _xtal_freq; uint16_t _bandwidth; uint8_t _band_mode,pad; uint32_t checksum;
+  uint32_t _xtal_freq; uint16_t _bandwidth; uint8_t _band_mode,pad,_lever_mode,_brightness; uint32_t checksum;
 } config_t;
 extern properties_t current_props;
 extern config_t config;
@@ -96,7 +107,7 @@ int caldata_recall(uint32_t);
 const properties_t *get_properties(uint32_t);
 void clear_all_config_prop_data(void);
 void cal_done(void);
-void cal_collect(uint16_t);
+bool cal_collect(uint16_t);
 void request_to_redraw(uint16_t);
 bool app_measurement_sweep(bool,uint16_t);
 void app_measurement_update_frequencies(void);
@@ -185,6 +196,9 @@ int main(void) {
   config_service_init();
   frequency0=14000000; frequency1=14350000; sweep_points=101;
   current_props._power=3;
+  current_props._portz=cal_load_r=50;
+  cal_frequency0=frequency0; cal_frequency1=frequency1; cal_sweep_points=sweep_points;
+  for(unsigned i=0;i<TRACES_MAX;++i) current_props._trace[i].scale=1;
   // HF retains the published mapping; V/U adds EU868 and redistributes points.
   // An FNV-style word hash guards the exact persisted frequency/index mapping.
   const uint32_t grid_fingerprint[]={0x960fe1d7u,0xd68238fbu};

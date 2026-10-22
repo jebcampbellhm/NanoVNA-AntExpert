@@ -74,6 +74,63 @@ static uint32_t checksum(const void* start, size_t len) {
   return value;
 }
 
+void properties_update_checksum(properties_t *p) {
+  p->checksum = checksum(p, sizeof *p - sizeof p->checksum);
+}
+
+static bool finite_value(float value) {
+  uint32_t bits;
+  memcpy(&bits,&value,sizeof bits);
+  return (bits & 0x7f800000u) != 0x7f800000u;
+}
+
+bool properties_valid(const properties_t *p) {
+  bool magic_ok = p->magic == PROPERTIES_MAGIC;
+#ifdef NANOVNA_F303
+  magic_ok |= antenna_cal_valid(p);
+#endif
+  if (!magic_ok || checksum(p, sizeof *p - sizeof p->checksum) != p->checksum ||
+      p->_sweep_points < 2 || p->_sweep_points > SWEEP_POINTS_MAX ||
+      p->_cal_sweep_points < 2 || p->_cal_sweep_points > SWEEP_POINTS_MAX ||
+      p->_frequency0 < FREQUENCY_MIN || p->_frequency1 > FREQUENCY_MAX ||
+      p->_frequency0 > p->_frequency1 || p->_cal_frequency0 < FREQUENCY_MIN ||
+      p->_cal_frequency1 > FREQUENCY_MAX || p->_cal_frequency0 > p->_cal_frequency1 ||
+      p->_current_trace < -1 || p->_current_trace >= TRACES_MAX ||
+      p->_active_marker < -1 || p->_active_marker >= MARKERS_MAX ||
+      p->_previous_marker < -1 || p->_previous_marker >= MARKERS_MAX ||
+      !finite_value(p->_portz) || p->_portz <= 0 ||
+      !finite_value(p->_cal_load_r) || p->_cal_load_r <= 0)
+    return false;
+#ifdef __VNA_MEASURE_MODULE__
+  if (p->_measure >= MEASURE_END) return false;
+#endif
+  for (unsigned i=0;i<TRACES_MAX;++i) {
+    const trace_t *t=&p->_trace[i];
+    if (t->type >= MAX_TRACE_TYPE || t->channel > 1 || t->smith_format >= MS_END ||
+        !finite_value(t->scale) || !finite_value(t->refpos) ||
+        !(t->scale > 0 && t->scale < 1e30f)) return false;
+  }
+  for (unsigned i=0;i<MARKERS_MAX;++i)
+    if (p->_markers[i].index >= SWEEP_POINTS_MAX) return false;
+  for (unsigned c=0;c<CAL_TYPE_COUNT;++c)
+    for (unsigned i=0;i<p->_cal_sweep_points;++i)
+      if (!finite_value(p->_cal_data[c][i][0]) || !finite_value(p->_cal_data[c][i][1])) return false;
+  return true;
+}
+
+// SD CAL import stages in the existing ANT scratch area, never a saved slot.
+int properties_stage_write(unsigned offset, const void *data, unsigned size) {
+  if (antenna_cal_stage() || calibration_in_progress || offset % 2048 ||
+      size > 2048 || !size || (size & 1) || offset >= sizeof(properties_t) ||
+      size > sizeof(properties_t)-offset) return -1;
+  if (chSemWaitTimeout(&flash_operation_semaphore, MS2ST(500)) != MSG_OK) return -1;
+  void *dst=(void *)(uintptr_t)(ANT_CAL_SCRATCH+offset);
+  flash_program_half_word_buffer(dst, (uint16_t *)data, size);
+  int result=memcmp(dst,data,size) ? -1 : 0;
+  chSemSignal(&flash_operation_semaphore);
+  return result;
+}
+
 static int config_save_impl(void) {
   // Wait for exclusive access to flash operations with timeout to prevent blocking measurements  
   msg_t msg = MSG_OK;
@@ -110,7 +167,8 @@ static int config_recall_impl(void) {
   const config_t* src = (const config_t*)SAVE_CONFIG_ADDR;
 
   if (src->magic != CONFIG_MAGIC ||
-      checksum(src, sizeof *src - sizeof src->checksum) != src->checksum)
+      checksum(src, sizeof *src - sizeof src->checksum) != src->checksum ||
+      src->_bandwidth > 511 || src->_lever_mode > LM_EDELAY || src->_brightness > 100)
     return -1;
   // duplicated saved data onto sram to be able to modify marker/trace
   memcpy(&config, src, sizeof(config_t));
@@ -144,9 +202,13 @@ static int save_properties(uint32_t id, bool antenna) {
     current_props.magic = PROPERTIES_MAGIC;
   current_props.checksum =
       checksum(&current_props, sizeof current_props - sizeof current_props.checksum);
+  if (!properties_valid(&current_props)) {
+    chSemSignal(&flash_operation_semaphore);
+    return -1;
+  }
 
   // write to flash
-  uint16_t* dst = (uint16_t*)calibration_slot_area(id);
+  uint16_t* dst = (uint16_t*)(uintptr_t)calibration_slot_area(id);
   flash_program_half_word_buffer(dst, (uint16_t*)&current_props, sizeof(properties_t));
   checksum_ok &= ~(1u << id);
   int result = memcmp(dst, &current_props, sizeof current_props) ? -1 : 0;
@@ -185,16 +247,11 @@ const properties_t* get_properties(uint32_t id) {
   if (id >= SAVEAREA_MAX)
     return NULL;
   // point to saved area on the flash memory
-  properties_t* src = (properties_t*)calibration_slot_area(id);
+  properties_t* src = (properties_t*)(uintptr_t)calibration_slot_area(id);
   // Check crc cache mask (made it only 1 time)
   if (checksum_ok & (1 << id))
     return src;
-  bool magic_ok = src->magic == PROPERTIES_MAGIC;
-#ifdef NANOVNA_F303
-  magic_ok |= antenna_cal_valid(src);
-#endif
-  if (!magic_ok ||
-      checksum(src, sizeof *src - sizeof src->checksum) != src->checksum)
+  if (!properties_valid(src))
     return NULL;
   checksum_ok |= 1 << id;
   return src;

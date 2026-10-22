@@ -82,20 +82,15 @@ static inline BaseAsynchronousChannel* shell_current_channel(void) {
 
 #define SHELL_IO_TIMEOUT MS2ST(20)
 
-/*
- * Deferred (mutex) commands like `scan` may take tens of seconds at low RBW / bandwidth
- * settings (and/or many points). If the wait times out, the shell thread prints a new
- * prompt while the sweep is still running, which desynchronizes host tools and makes
- * them interpret old/partial buffers as new segments.
- */
-#define SHELL_DEFERRED_EXECUTION_TIMEOUT MS2ST(300000) // 5 minutes
+static bool shell_output_failed;
 
 static bool shell_io_write(const uint8_t* data, size_t size) {
   BaseAsynchronousChannel* channel = shell_current_channel();
-  if (channel == NULL || data == NULL) {
+  if (shell_output_failed || channel == NULL || data == NULL) {
     return false;
   }
   size_t written = 0;
+  unsigned stalls = 0;
 
   while (written < size) {
     // Use blocking write (100ms timeout) to allow efficient sleeping while waiting for buffer space.
@@ -103,9 +98,11 @@ static bool shell_io_write(const uint8_t* data, size_t size) {
 
     if (sent > 0) {
       written += sent;
+      stalls = 0;
     } else {
       // Timeout incurred (sent=0). Check connection.
-      if (!shell_check_connect()) {
+      if (!shell_check_connect() || ++stalls >= 10) {
+        shell_output_failed = true;
         return false;
       }
       #ifndef NANOVNA_HOST_TEST
@@ -213,6 +210,7 @@ void shell_wake_all_waiting_threadsI(void) {
 
 static void shell_handle_session_transition(bool active) {
   if (active && !shell_session_active) {
+    shell_output_failed = false;
     shell_session_active = true;
     if (shell_session_start_cb != NULL) {
       shell_session_start_cb();
@@ -326,7 +324,16 @@ void shell_register_commands(const vna_shell_command* table) {
 
 const vna_shell_command* shell_parse_command(char* line, uint16_t* argc, char*** argv,
                                            const char** name_out) {
-  shell_nargs = parse_line(line, shell_args, ARRAY_COUNT(shell_args));
+  shell_output_failed = false; // A new command may retry after a stalled reader.
+  if (argc) *argc = 0;
+  if (argv) *argv = NULL;
+  if (name_out) *name_out = NULL;
+  int parsed = parse_line(line, shell_args, ARRAY_COUNT(shell_args));
+  if (parsed < 0) {
+    shell_printf("unterminated quote" VNA_SHELL_NEWLINE_STR);
+    return NULL;
+  }
+  shell_nargs = parsed;
   if (shell_nargs > ARRAY_COUNT(shell_args)) {
     shell_printf("too many arguments, max " define_to_STR(VNA_SHELL_MAX_ARGUMENTS)
                      VNA_SHELL_NEWLINE_STR);
@@ -365,15 +372,13 @@ const vna_shell_command* shell_parse_command(char* line, uint16_t* argc, char***
 }
 
 void shell_request_deferred_execution(const vna_shell_command* command, uint16_t argc, char** argv) {
+  osalSysLock();
   pending_command = command;
   pending_argc = argc;
   pending_argv = argv;
-  osalSysLock();
-  osalThreadEnqueueTimeoutS(&shell_thread, SHELL_DEFERRED_EXECUTION_TIMEOUT);
+  // The command owns argv until completion. Never reuse it after a wait timeout.
+  osalThreadEnqueueTimeoutS(&shell_thread, TIME_INFINITE);
   osalSysUnlock();
-  if (shell_event_bus != NULL) {
-    event_bus_publish(shell_event_bus, EVENT_USB_COMMAND_PENDING, NULL);
-  }
 }
 
 void shell_service_pending_commands(void) {

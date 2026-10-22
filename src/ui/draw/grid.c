@@ -276,6 +276,8 @@ int rectangular_grid_x(uint32_t x) {
     return 0;
   if (x == 0 || x == WIDTH)
     return 1;
+  if (grid_width == 0)
+    return 0; // CW has no frequency divisions; keep the border and horizontal grid.
   return (((x << GRID_BITS) + grid_offset) % grid_width) < (1 << GRID_BITS);
 }
 

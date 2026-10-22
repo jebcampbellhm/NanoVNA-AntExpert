@@ -21,6 +21,7 @@
 #include "sys/shell_commands.h"
 #include "runtime/runtime_features.h"
 #include "nanovna.h"
+#include "rf/pipeline.h"
 #ifdef NANOVNA_F303
 #pragma GCC optimize("Os")
 #endif
@@ -224,12 +225,13 @@ VNA_SHELL_FUNCTION(cmd_scan) {
   if (start != original_start || stop != original_stop)
     restore_config = true;
   if (argc >= 3) {
-    points = my_atoui(argv[2]);
-    if (points == 0 || points > SWEEP_POINTS_MAX) {
+    uint32_t requested = my_atoui(argv[2]);
+    if (requested < 2 || requested > SWEEP_POINTS_MAX) {
       shell_printf("sweep points exceeds range " define_to_STR(SWEEP_POINTS_MAX)
                        VNA_SHELL_NEWLINE_STR);
       return;
     }
+    points = requested;
     sweep_points = points;
     if (points != original_points)
       restore_config = true;
@@ -269,8 +271,14 @@ VNA_SHELL_FUNCTION(cmd_scan) {
 
   if (sweep_ch & (SWEEP_CH0_MEASURE | SWEEP_CH1_MEASURE)) {
     app_measurement_reset();
-    if (app_measurement_sweep(false, sweep_ch))
-      sweep_service_increment_generation();
+    if (!app_measurement_sweep(false, sweep_ch)) {
+      shell_printf("Capture failed" VNA_SHELL_NEWLINE_STR);
+      sweep_points = original_points;
+      app_measurement_update_frequencies();
+      return;
+    }
+    if (!(mask & SCAN_MASK_NO_CALIBRATION)) measurement_pipeline_renormalize(sweep_ch);
+    sweep_service_increment_generation();
   }
   pause_sweep();
   
@@ -586,12 +594,12 @@ VNA_SHELL_FUNCTION(cmd_cal) {
   }
   request_to_redraw(REDRAW_CAL_STATUS);
   static const char cmd_cal_list[] = "load|open|short|thru|isoln|done|on|off|reset";
-  switch (get_str_index(argv[0], cmd_cal_list)) {
-  case 0: cal_collect(CAL_LOAD); return;
-  case 1: cal_collect(CAL_OPEN); return;
-  case 2: cal_collect(CAL_SHORT); return;
-  case 3: cal_collect(CAL_THRU); return;
-  case 4: cal_collect(CAL_ISOLN); return;
+  int op = get_str_index(argv[0], cmd_cal_list);
+  if (op >= 0 && op < 5) {
+    if (!cal_collect(op)) shell_printf("Capture failed" VNA_SHELL_NEWLINE_STR);
+    return;
+  }
+  switch (op) {
   case 5: cal_done(); return;
   case 6: cal_status |= CALSTAT_APPLY; return;
   case 7: cal_status &= ~CALSTAT_APPLY; return;

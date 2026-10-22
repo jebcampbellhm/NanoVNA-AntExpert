@@ -169,9 +169,9 @@ static void test_measure_search_value_right(void) {
   float freq = measure_search_value(&idx, 4.0f, curve_value, MEASURE_SEARCH_RIGHT, 5);
   const float expected = (float)frequency0 + measure_frequency_step * 3.0f;
   expect_float_close(expected, freq, 0.5f, "search right frequency");
-  CHECK(idx == 2); /* marker sticks to the last >y sample */
+  CHECK(idx == 3); /* an exact crossing selects that sample */
   CHECK(g_last_marker_slot == 5);
-  CHECK(g_last_marker_index == 2);
+  CHECK(g_last_marker_index == 3);
 }
 
 static void test_measure_search_value_left(void) {
@@ -188,9 +188,9 @@ static void test_measure_search_value_left(void) {
   float freq = measure_search_value(&idx, 4.0f, curve_value, MEASURE_SEARCH_LEFT, 6);
   const float expected = (float)frequency0 + measure_frequency_step * 7.0f;
   expect_float_close(expected, freq, 0.5f, "search left frequency");
-  CHECK(idx == 8);
+  CHECK(idx == 7);
   CHECK(g_last_marker_slot == 6);
-  CHECK(g_last_marker_index == 8);
+  CHECK(g_last_marker_index == 7);
 }
 
 static void test_search_peak_value_max(void) {
@@ -365,7 +365,22 @@ static void test_cable_length(void) {
   measured[0][2][0]=1e30f; CHECK(cable_quarter_wave_frequency()==0);
 }
 
+static void test_search_edges(void) {
+  configure_sweep(5,1000000U,1000.0f);
+  for(unsigned i=0;i<5;++i) g_curve_data[i]=1;
+  uint16_t idx=3;
+  CHECK(measure_search_value(&idx,0,curve_value,MEASURE_SEARCH_LEFT,MARKER_INVALID)==0);
+  idx=1;
+  CHECK(measure_search_value(&idx,0,curve_value,MEASURE_SEARCH_RIGHT,MARKER_INVALID)==0);
+  for(unsigned i=0;i<5;++i) g_curve_data[i]=(float)i;
+  idx=3;
+  CHECK(measure_search_value(&idx,0,curve_value,MEASURE_SEARCH_LEFT,MARKER_INVALID)==1000000 && idx==0);
+  idx=99; CHECK(search_peak_value(&idx,curve_value,true)==4 && idx==4);
+  idx=99; CHECK(search_peak_value(&idx,curve_value,false)==0 && idx==0);
+}
+
 int main(void) {
+  test_search_edges();
   memset(&config, 0, sizeof(config));
   config._measure_r = 50.0f;
   test_match_quadratic_equation();

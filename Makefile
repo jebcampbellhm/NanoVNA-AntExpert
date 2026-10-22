@@ -468,6 +468,9 @@ test: tests
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_roller_input.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_antenna_cal.py
 	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_mode_guidance.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_review_fixes.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_storage_io.py
+	HOST_CC="$(HOST_CC)" $(HOST_PYTHON) tests/unit/test_i2c_recovery.py
 
 # Define ChibiOS sources and objects (handle potential ./ prefix)
 CHIBIOS_SOURCES := $(filter third_party/ChibiOS/% ./third_party/ChibiOS/%, $(CSRC))

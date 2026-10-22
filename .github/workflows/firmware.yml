@@ -196,7 +196,7 @@ jobs:
           if [ -f tools/makedfu.py ]; then
             python3 tools/makedfu.py "build/${proj}.bin" "build/${proj}.dfu" --preset-target "${{ steps.project.outputs.dfusepreset }}" --device-id 0x0000
             if command -v dfu-suffix >/dev/null 2>&1; then
-              dfu-suffix --check "build/${proj}.dfu" || true
+              dfu-suffix --check "build/${proj}.dfu"
             fi
           else
             echo "tools/makedfu.py not found, skipping DFU generation"
