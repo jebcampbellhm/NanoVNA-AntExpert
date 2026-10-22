@@ -1,3 +1,6 @@
+#ifdef NANOVNA_F303
+#pragma GCC optimize("Os")
+#endif
 /*
  * Copyright (c) 2024, @momentics <momentics@gmail.com>
  * Originally written using elements from Dmitry (DiSlord) dislordlive@gmail.com

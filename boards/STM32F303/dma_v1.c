@@ -24,7 +24,7 @@
 // F303 DMA1 interrupts handler function
 #if defined(DMA1_CH1_HANDLER_FUNC) || defined(DMA1_USE_ALL_HANDLERS)
 OSAL_IRQ_HANDLER(STM32_DMA1_CH1_HANDLER) {
-  uint32_t flags = DMA1->ISR; DMA1->IFCR = flags;  // reset interrupt vector
+  uint32_t flags = DMA1->ISR & (STM32_DMA_ISR_MASK << 0); DMA1->IFCR = flags;  // reset interrupt vector
 #ifdef DMA1_CH1_HANDLER_FUNC
   if (flags & (STM32_DMA_ISR_MASK<<0)) DMA1_CH1_HANDLER_FUNC((flags>>0)&STM32_DMA_ISR_MASK); // DMA Channel 1 handler
 #endif
@@ -33,7 +33,7 @@ OSAL_IRQ_HANDLER(STM32_DMA1_CH1_HANDLER) {
 
 #if defined(DMA1_CH2_HANDLER_FUNC) || defined(DMA1_USE_ALL_HANDLERS)
 OSAL_IRQ_HANDLER(STM32_DMA1_CH2_HANDLER) {
-  uint32_t flags = DMA1->ISR; DMA1->IFCR = flags;  // reset interrupt vector
+  uint32_t flags = DMA1->ISR & (STM32_DMA_ISR_MASK << 4); DMA1->IFCR = flags;  // reset interrupt vector
 #ifdef DMA1_CH2_HANDLER_FUNC
   if (flags & (STM32_DMA_ISR_MASK<<4)) DMA1_CH2_HANDLER_FUNC((flags>>4)&STM32_DMA_ISR_MASK); // DMA Channel 2 handler
 #endif
@@ -42,7 +42,7 @@ OSAL_IRQ_HANDLER(STM32_DMA1_CH2_HANDLER) {
 
 #if defined(DMA1_CH3_HANDLER_FUNC) || defined(DMA1_USE_ALL_HANDLERS)
 OSAL_IRQ_HANDLER(STM32_DMA1_CH3_HANDLER) {
-  uint32_t flags = DMA1->ISR; DMA1->IFCR = flags;  // reset interrupt vector
+  uint32_t flags = DMA1->ISR & (STM32_DMA_ISR_MASK << 8); DMA1->IFCR = flags;  // reset interrupt vector
 #ifdef DMA1_CH3_HANDLER_FUNC
   if (flags & (STM32_DMA_ISR_MASK<<8)) DMA1_CH3_HANDLER_FUNC((flags>>8)&STM32_DMA_ISR_MASK); // DMA Channel 3 handler
 #endif
@@ -51,7 +51,7 @@ OSAL_IRQ_HANDLER(STM32_DMA1_CH3_HANDLER) {
 
 #if defined(DMA1_CH4_HANDLER_FUNC) || defined(DMA1_USE_ALL_HANDLERS)
 OSAL_IRQ_HANDLER(STM32_DMA1_CH4_HANDLER) {
-  uint32_t flags = DMA1->ISR; DMA1->IFCR = flags;  // reset interrupt vector
+  uint32_t flags = DMA1->ISR & (STM32_DMA_ISR_MASK << 12); DMA1->IFCR = flags;  // reset interrupt vector
 #ifdef DMA1_CH4_HANDLER_FUNC
   if (flags & (STM32_DMA_ISR_MASK<<12)) DMA1_CH4_HANDLER_FUNC((flags>>12)&STM32_DMA_ISR_MASK); // DMA Channel 4 handler
 #endif
@@ -60,7 +60,7 @@ OSAL_IRQ_HANDLER(STM32_DMA1_CH4_HANDLER) {
 
 #if defined(DMA1_CH5_HANDLER_FUNC) || defined(DMA1_USE_ALL_HANDLERS)
 OSAL_IRQ_HANDLER(STM32_DMA1_CH5_HANDLER) {
-  uint32_t flags = DMA1->ISR; DMA1->IFCR = flags;  // reset interrupt vector
+  uint32_t flags = DMA1->ISR & (STM32_DMA_ISR_MASK << 16); DMA1->IFCR = flags;  // reset interrupt vector
 #ifdef DMA1_CH5_HANDLER_FUNC
   if (flags & (STM32_DMA_ISR_MASK<<16)) DMA1_CH5_HANDLER_FUNC((flags>>16)&STM32_DMA_ISR_MASK); // DMA Channel 5 handler
 #endif
@@ -69,7 +69,7 @@ OSAL_IRQ_HANDLER(STM32_DMA1_CH5_HANDLER) {
 
 #if defined(DMA1_CH6_HANDLER_FUNC) || defined(DMA1_USE_ALL_HANDLERS)
 OSAL_IRQ_HANDLER(STM32_DMA1_CH6_HANDLER) {
-  uint32_t flags = DMA1->ISR; DMA1->IFCR = flags;  // reset interrupt vector
+  uint32_t flags = DMA1->ISR & (STM32_DMA_ISR_MASK << 20); DMA1->IFCR = flags;  // reset interrupt vector
 #ifdef DMA1_CH6_HANDLER_FUNC
   if (flags & (STM32_DMA_ISR_MASK<<20)) DMA1_CH6_HANDLER_FUNC((flags>>20)&STM32_DMA_ISR_MASK); // DMA Channel 6 handler
 #endif
@@ -78,7 +78,7 @@ OSAL_IRQ_HANDLER(STM32_DMA1_CH6_HANDLER) {
 
 #if defined(DMA1_CH7_HANDLER_FUNC) || defined(DMA1_USE_ALL_HANDLERS)
 OSAL_IRQ_HANDLER(STM32_DMA1_CH7_HANDLER) {
-  uint32_t flags = DMA1->ISR; DMA1->IFCR = flags;  // reset interrupt vector
+  uint32_t flags = DMA1->ISR & (STM32_DMA_ISR_MASK << 24); DMA1->IFCR = flags;  // reset interrupt vector
 #ifdef DMA1_CH7_HANDLER_FUNC
   if (flags & (STM32_DMA_ISR_MASK<<24)) DMA1_CH7_HANDLER_FUNC((flags>>24)&STM32_DMA_ISR_MASK); // DMA Channel 7 handler
 #endif

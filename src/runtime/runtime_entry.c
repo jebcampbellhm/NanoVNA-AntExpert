@@ -74,12 +74,8 @@ void lcd_set_brightness(uint16_t brightness);
 // enable this need reduce spi_buffer size, by default shell runs in main thread
 // #define VNA_SHELL_THREAD
 
-static event_bus_t app_event_bus;
-static event_bus_subscription_t app_event_slots[6];
-
-#define APP_EVENT_QUEUE_DEPTH 6U
-static msg_t app_event_queue_storage[APP_EVENT_QUEUE_DEPTH];
-static event_bus_queue_node_t app_event_nodes[APP_EVENT_QUEUE_DEPTH];
+// The runtime uses direct calls on the sweep/UI owner. Do not allocate an undrained
+// secondary event queue or implicitly autosave configuration changes.
 
 static board_events_t board_events;
 static const display_presenter_t lcd_display_presenter = {.context = NULL,
@@ -514,6 +510,8 @@ void set_marker_index(int m, int idx) {
 }
 
 freq_t get_marker_frequency(int marker) {
+  if ((unsigned)marker >= MARKERS_MAX || !markers[marker].enabled)
+    return 0;
   return markers[marker].frequency;
 }
 
@@ -774,10 +772,6 @@ int runtime_main(void) {
   }
 
   config_service_init();
-  event_bus_init(&app_event_bus, app_event_slots, ARRAY_COUNT(app_event_slots),
-                 app_event_queue_storage, ARRAY_COUNT(app_event_queue_storage),
-                 app_event_nodes, ARRAY_COUNT(app_event_nodes));
-  shell_attach_bus(&app_event_bus);
   shell_on_session_start(usb_command_session_started);
   shell_on_session_stop(usb_command_session_stopped);
   board_events_init(&board_events);
@@ -785,7 +779,7 @@ int runtime_main(void) {
   ui_controller_port_t ui_controller_port = {
       .board_events = &board_events,
       .display = &lcd_display_presenter,
-      .config_events = &app_event_bus,
+      .config_events = NULL,
   };
   ui_controller_configure(&ui_controller_port);
 
@@ -793,7 +787,7 @@ int runtime_main(void) {
   measurement_engine_port.can_start_sweep = app_measurement_can_start_sweep;
   measurement_engine_port.handle_result = app_measurement_handle_result;
   measurement_engine_port.service_loop = app_measurement_service_loop;
-  measurement_engine_init(&measurement_engine, &measurement_engine_port, &app_event_bus, drivers);
+  measurement_engine_init(&measurement_engine, &measurement_engine_port, NULL, drivers);
 
   /*
    * restore config and calibration 0 slot from flash memory, also if need use backup data

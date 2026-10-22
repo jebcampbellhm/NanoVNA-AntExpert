@@ -27,7 +27,8 @@
 static inline void measurement_engine_publish(measurement_engine_t* engine, event_bus_topic_t event,
                                               const uint16_t* mask) {
   if (engine->event_bus != NULL) {
-    event_bus_publish(engine->event_bus, event, mask);
+    (void)mask;
+    event_bus_publish(engine->event_bus, event, NULL);
   }
 }
 

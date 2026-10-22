@@ -44,6 +44,12 @@ typedef struct {
 
 const config_service_api_t* config_service_api(void);
 void config_service_init(void);
+bool properties_valid(const properties_t *p);
+void properties_update_checksum(properties_t *p);
+#ifdef NANOVNA_F303
+#define CAL_IMPORT_SCRATCH (SAVE_CONFIG_ADDR + SAVE_CONFIG_SIZE)
+int properties_stage_write(unsigned offset, const void *data, unsigned size);
+#endif
 void config_service_attach_event_bus(event_bus_t* bus);
 void config_service_notify_configuration_changed(void);
 void config_service_start_calibration(void);

@@ -419,6 +419,13 @@ test: tests
 		"$$suite"; \
 	done
 
+	HOST_CC="$(HOST_CC)" python3 tests/unit/test_review_fixes.py
+	HOST_CC="$(HOST_CC)" python3 tests/unit/test_storage_io.py
+	HOST_CC="$(HOST_CC)" python3 tests/unit/test_i2c_recovery.py
+	HOST_CC="$(HOST_CC)" python3 tests/unit/test_storage_parser.py
+	HOST_CC="$(HOST_CC)" python3 tests/unit/test_dma_flags.py
+	python3 tests/unit/test_flash_boundaries.py
+
 # Define ChibiOS sources and objects (handle potential ./ prefix)
 CHIBIOS_SOURCES := $(filter third_party/ChibiOS/% ./third_party/ChibiOS/%, $(CSRC))
 CHIBIOS_OBJECTS := $(addprefix build/obj/, $(notdir $(CHIBIOS_SOURCES:.c=.o)))

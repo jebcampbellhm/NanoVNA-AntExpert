@@ -38,14 +38,10 @@ uint16_t measurement_pipeline_active_mask(measurement_pipeline_t* pipeline) {
   return app_measurement_get_sweep_mask();
 }
 
-bool measurement_pipeline_execute(measurement_pipeline_t* pipeline, bool break_on_operation,
-                                  uint16_t channel_mask) {
-  (void)pipeline;
-  bool res = app_measurement_sweep(break_on_operation, channel_mask);
-
+void measurement_pipeline_renormalize(uint16_t channel_mask) {
 #ifdef __VNA_Z_RENORMALIZATION__
-  if (res && current_props._portz != 50.0f && current_props._portz > 1.0f) {
-     float k = (current_props._portz - 50.0f) / (current_props._portz + 50.0f);
+  if (current_props._portz != cal_load_r && current_props._portz > 1.0f && cal_load_r > 1.0f) {
+     float k = (current_props._portz - cal_load_r) / (current_props._portz + cal_load_r);
      uint16_t count = sweep_points;
      // Only renormalize CH0 (S11)
      if (channel_mask & 1) {
@@ -70,6 +66,15 @@ bool measurement_pipeline_execute(measurement_pipeline_t* pipeline, bool break_o
        }
      }
   }
+#else
+  (void)channel_mask;
 #endif
+}
 
-  return res;}
+bool measurement_pipeline_execute(measurement_pipeline_t* pipeline, bool break_on_operation,
+                                  uint16_t channel_mask) {
+  (void)pipeline;
+  bool res = app_measurement_sweep(break_on_operation, channel_mask);
+  if (res) measurement_pipeline_renormalize(channel_mask);
+  return res;
+}
